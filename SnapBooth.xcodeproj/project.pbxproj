@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A00000000000000000000017 /* CanonUSBPTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000017 /* CanonUSBPTPClient.swift */; };
 		A00000000000000000000016 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000016 /* Assets.xcassets */; };
 		A00000000000000000000001 /* SnapBoothApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000001 /* SnapBoothApp.swift */; };
 		A00000000000000000000003 /* CameraService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000003 /* CameraService.swift */; };
@@ -21,6 +22,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		B00000000000000000000017 /* CanonUSBPTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanonUSBPTPClient.swift; sourceTree = "<group>"; };
 		B00000000000000000000016 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B00000000000000000000001 /* SnapBoothApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapBoothApp.swift; sourceTree = "<group>"; };
 		B00000000000000000000003 /* CameraService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraService.swift; sourceTree = "<group>"; };
@@ -64,6 +66,7 @@
 				B00000000000000000000003 /* CameraService.swift */,
 				B00000000000000000000013 /* CanonRemoteBridge.swift */,
 				B00000000000000000000014 /* CanonCCAPIClient.swift */,
+				B00000000000000000000017 /* CanonUSBPTPClient.swift */,
 				B00000000000000000000004 /* CameraPreview.swift */,
 				B00000000000000000000005 /* PrinterService.swift */,
 				B00000000000000000000006 /* PrintLayoutRenderer.swift */,
@@ -179,6 +182,7 @@
 				A00000000000000000000003 /* CameraService.swift in Sources */,
 				A00000000000000000000013 /* CanonRemoteBridge.swift in Sources */,
 				A00000000000000000000014 /* CanonCCAPIClient.swift in Sources */,
+				A00000000000000000000017 /* CanonUSBPTPClient.swift in Sources */,
 				A00000000000000000000004 /* CameraPreview.swift in Sources */,
 				A00000000000000000000005 /* PrinterService.swift in Sources */,
 				A00000000000000000000006 /* PrintLayoutRenderer.swift in Sources */,
@@ -234,13 +238,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 33;
 				DEVELOPMENT_TEAM = J45VHTZ8L6;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SnapBooth/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.5.3;
+				MARKETING_VERSION = 0.5.4;
 				PRODUCT_BUNDLE_IDENTIFIER = app.snapbooth.ipad;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
@@ -256,13 +260,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 28;
+				CURRENT_PROJECT_VERSION = 33;
 				DEVELOPMENT_TEAM = J45VHTZ8L6;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SnapBooth/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.5.3;
+				MARKETING_VERSION = 0.5.4;
 				PRODUCT_BUNDLE_IDENTIFIER = app.snapbooth.ipad;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";

@@ -446,6 +446,12 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         live.videoPreviewLayer.session = camera.session
         camera.$state.receive(on: DispatchQueue.main).sink { [weak self] state in
             self?.status.text = state.description
+            if let self, self.busy, self.expectingCameraCapture,
+               self.camera.selectedCameraID == CanonUSBPTPClient.cameraID,
+               case .unavailable(let message) = state {
+                self.loadingTitle.text = message
+                self.loadingDetail.text = "照片读取完成后会自动显示，请勿重复拍摄"
+            }
             self?.updateButtons()
         }.store(in: &subscriptions)
         camera.$cameras.receive(on: DispatchQueue.main).sink { [weak self] options in
@@ -1473,6 +1479,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
             : printable != nil && !rendering && PrintLayoutRenderer.standardCells(style: style)?.isEmpty != true)
         cameraButton.isEnabled = !busy
         recoverCameraPhoto.isEnabled = !busy && (
+            camera.selectedCameraID == CanonUSBPTPClient.cameraID ||
             camera.selectedCameraID == CanonRemoteBridge.cameraID ||
             camera.selectedCameraID == CanonCCAPIClient.cameraID
         )

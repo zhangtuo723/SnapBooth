@@ -47,6 +47,7 @@ final class CameraService: NSObject, ObservableObject {
     @Published private(set) var canonCCAPIUsername = CanonCCAPIClient.savedUsername
     @Published var capturedImage: UIImage? {
         didSet {
+            usbClient.previewEnabled = capturedImage == nil
             if selectedCameraID == CanonCCAPIClient.cameraID {
                 if capturedImage == nil { startCCAPIPreview() } else { stopCCAPIPreview() }
             }
@@ -66,6 +67,7 @@ final class CameraService: NSObject, ObservableObject {
     private let remoteQueue = DispatchQueue(label: "app.snapbooth.camera.canon-remote", qos: .userInitiated)
     private let remoteBridge = CanonRemoteBridge()
     private let ccapiClient = CanonCCAPIClient()
+    private let usbClient = CanonUSBPTPClient()
     private let photoOutput = AVCapturePhotoOutput()
     private let videoOutput = AVCaptureVideoDataOutput()
     private let videoQueue = DispatchQueue(label: "snapbooth.video.frames", qos: .userInitiated)
@@ -83,11 +85,20 @@ final class CameraService: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        usbClient.onState = { [weak self] state in
+            guard let self, self.selectedCameraID == CanonUSBPTPClient.cameraID else { return }
+            self.state = state
+        }
+        usbClient.onFrame = { [weak self] image in
+            guard let self, self.selectedCameraID == CanonUSBPTPClient.cameraID, self.capturedImage == nil else { return }
+            self.latestFrame = image
+        }
         refreshCameras()
     }
 
     func start() {
         refreshCameras()
+        if selectedCameraID == CanonUSBPTPClient.cameraID { activateUSBCamera(); return }
         if selectedCameraID == CanonCCAPIClient.cameraID {
             activateCCAPICamera()
             return
@@ -124,6 +135,7 @@ final class CameraService: NSObject, ObservableObject {
     }
 
     func stop() {
+        usbClient.stop()
         stopCCAPIPreview()
         ccapiActivationTask?.cancel()
         ccapiActivationTask = nil
@@ -145,6 +157,7 @@ final class CameraService: NSObject, ObservableObject {
             CameraOption(id: $0.uniqueID, name: Self.displayName(for: $0), position: $0.position, isRemote: false)
         }
         #if !targetEnvironment(macCatalyst)
+        options.append(CameraOption(id: CanonUSBPTPClient.cameraID, name: CanonUSBPTPClient.displayName, position: .unspecified, isRemote: true))
         options.append(CameraOption(
             id: CanonCCAPIClient.cameraID,
             name: CanonCCAPIClient.displayName,
@@ -158,7 +171,7 @@ final class CameraService: NSObject, ObservableObject {
                 #if targetEnvironment(macCatalyst)
                 self?.selectedCameraID = options.first(where: { $0.position == .back })?.id ?? options.first?.id
                 #else
-                self?.selectedCameraID = CanonCCAPIClient.cameraID
+                self?.selectedCameraID = CanonUSBPTPClient.cameraID
                 #endif
             }
         }
@@ -195,10 +208,14 @@ final class CameraService: NSObject, ObservableObject {
     func selectCamera(id: String) {
         cameraSelectionWasExplicit = true
         if selectedCameraID == id {
+            if id == CanonUSBPTPClient.cameraID { activateUSBCamera() }
             if id == CanonCCAPIClient.cameraID { activateCCAPICamera() }
             return
         }
+        usbClient.stop()
+        latestFrame = nil
         selectedCameraID = id
+        if id == CanonUSBPTPClient.cameraID { activateUSBCamera(); return }
         if id == CanonCCAPIClient.cameraID {
             activateCCAPICamera()
             return
@@ -223,6 +240,10 @@ final class CameraService: NSObject, ObservableObject {
             return
         }
 
+        if selectedCameraID == CanonUSBPTPClient.cameraID {
+            captureUSB(completion: completion)
+            return
+        }
         if selectedCameraID == CanonCCAPIClient.cameraID {
             captureCCAPI(completion: completion)
             return
@@ -251,6 +272,7 @@ final class CameraService: NSObject, ObservableObject {
     }
 
     func recoverLatestRemotePhoto(completion: @escaping (Result<UIImage, Error>) -> Void) {
+        if selectedCameraID == CanonUSBPTPClient.cameraID { captureUSB(recover: true, completion: completion); return }
         if selectedCameraID == CanonCCAPIClient.cameraID {
             recoverLatestCCAPIPhoto(completion: completion)
             return
@@ -317,6 +339,7 @@ final class CameraService: NSObject, ObservableObject {
     }
 
     private func configureAndStart() {
+        if selectedCameraID == CanonUSBPTPClient.cameraID { activateUSBCamera(); return }
         if selectedCameraID == CanonCCAPIClient.cameraID {
             activateCCAPICamera()
             return
@@ -420,7 +443,30 @@ final class CameraService: NSObject, ObservableObject {
         return "外接相机 · \(device.localizedName)"
     }
 
+    private func activateUSBCamera() {
+        ccapiActivationTask?.cancel()
+        stopCCAPIPreview()
+        Task { await ccapiClient.stopLiveView() }
+        sessionQueue.async { [weak self] in
+            if self?.session.isRunning == true { self?.session.stopRunning() }
+        }
+        usbClient.previewEnabled = capturedImage == nil
+        usbClient.start()
+    }
+
+    private func captureUSB(recover: Bool = false, completion: @escaping (Result<UIImage, Error>) -> Void) {
+        usbClient.capture(recover: recover) { [weak self] result in
+            guard let self, self.selectedCameraID == CanonUSBPTPClient.cameraID else {
+                completion(.failure(CameraError.notReady))
+                return
+            }
+            if case .success(let image) = result { self.capturedImage = image }
+            completion(result)
+        }
+    }
+
     private func activateCCAPICamera() {
+        usbClient.stop()
         ccapiActivationTask?.cancel()
         stopCCAPIPreview()
         sessionQueue.async { [weak self] in
