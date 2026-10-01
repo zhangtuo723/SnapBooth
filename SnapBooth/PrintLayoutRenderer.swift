@@ -40,7 +40,72 @@ enum PhotoFrame: String, CaseIterable {
     }
 }
 enum WeddingTemplate: String, CaseIterable {
+    case editorial = "时刻杂志"
+    case analog = "复古暗房"
+    case instantPaper = "奶油拍立得"
+    case chineseFoil = "朱红金囍"
+    case floralPhoto = "白玫瑰之约"
+    case invitationIllustration = "婚礼请柬"
+    case blushIllustration = "怦然心动"
+    case gardenIllustration = "奶油花园"
+    case celebrationIllustration = "晴空派对"
     case none = "纯净"
+
+    static var curated: [WeddingTemplate] { [.editorial, .analog, .instantPaper, .chineseFoil, .floralPhoto, .invitationIllustration, .blushIllustration, .gardenIllustration, .celebrationIllustration, .none] }
+    var hasPhotoWindow: Bool {
+        assetName != nil || self == .editorial || self == .analog || self == .instantPaper
+    }
+    var defaultCaptions: [PhotoCaption] {
+        switch self {
+        case .invitationIllustration: return [.weddingTitle]
+        case .editorial: return [
+            PhotoCaption(text: "THE MOMENT", center: CGPoint(x: 0.5, y: 0.09), width: 0.9, fontSize: 0.105, font: .serif, color: .black),
+            PhotoCaption(text: "A STORY WORTH KEEPING", center: CGPoint(x: 0.5, y: 0.935), width: 0.8, fontSize: 0.023, font: .modern, color: .black)]
+        case .analog: return [PhotoCaption(text: "GOOD TIMES · FOREVER", center: CGPoint(x: 0.5, y: 0.935), width: 0.75, fontSize: 0.03, font: .modern, color: .gold)]
+        case .instantPaper: return [PhotoCaption(text: "a little moment of happiness", center: CGPoint(x: 0.5, y: 0.9), width: 0.8, fontSize: 0.062, font: .script)]
+        case .chineseFoil: return [PhotoCaption(text: "囍 · 良辰与共", center: CGPoint(x: 0.5, y: 0.063), width: 0.64, fontSize: 0.053, font: .serif, color: .white)]
+        case .floralPhoto: return [PhotoCaption(text: "forever starts here", center: CGPoint(x: 0.5, y: 0.94), width: 0.52, fontSize: 0.04, font: .script)]
+        default: return []
+        }
+    }
+    var assetName: String? {
+        switch self {
+        case .chineseFoil: return "FrameChineseFoil"
+        case .floralPhoto: return "FrameFloralPhoto"
+        case .invitationIllustration: return "FrameInvitation"
+        case .blushIllustration: return "FrameBlush"
+        case .gardenIllustration: return "FrameGarden"
+        case .celebrationIllustration: return "FrameCelebration"
+        default: return nil
+        }
+    }
+    var photoWindow: CGRect {
+        switch self {
+        case .editorial: return CGRect(x: 0.045, y: 0.19, width: 0.91, height: 0.68)
+        case .analog: return CGRect(x: 0.075, y: 0.11, width: 0.85, height: 0.76)
+        case .instantPaper: return CGRect(x: 0.055, y: 0.06, width: 0.89, height: 0.72)
+        case .chineseFoil: return CGRect(x: 0.084, y: 0.129, width: 0.832, height: 0.715)
+        case .floralPhoto: return CGRect(x: 0.07, y: 0.095, width: 0.863, height: 0.775)
+        case .invitationIllustration: return CGRect(x: 0.034, y: 0.157, width: 0.727, height: 0.713)
+        case .gardenIllustration: return CGRect(x: 0.087, y: 0.11, width: 0.826, height: 0.75)
+        case .celebrationIllustration: return CGRect(x: 0.089, y: 0.131, width: 0.824, height: 0.738)
+        default: return CGRect(x: 0.082, y: 0.118, width: 0.836, height: 0.762)
+        }
+    }
+    var detail: String {
+        switch self {
+        case .editorial: return "杂志风 · 黑白排版与留白"
+        case .analog: return "胶片风 · 暗房黑与齿孔"
+        case .instantPaper: return "韩式拍立得 · 奶油纸与手写落款"
+        case .chineseFoil: return "中式婚礼 · 朱红与金箔窗棂"
+        case .floralPhoto: return "摄影花艺 · 真实玫瑰与丝绸"
+        case .invitationIllustration: return "手绘新人 · 请柬式留白"
+        case .blushIllustration: return "粉色缎带 · 手绘婚礼"
+        case .gardenIllustration: return "奶油纸感 · 白花绿叶"
+        case .celebrationIllustration: return "晴空蓝 · 气球与星光"
+        default: return "简约留白 · 自选边框"
+        }
+    }
     case redGold = "红金囍宴"
     case garden = "花园誓言"
     case film = "甜蜜胶片"
@@ -55,6 +120,50 @@ enum WeddingTemplate: String, CaseIterable {
 }
 enum PaperDirection: String, CaseIterable { case auto = "自动", portrait = "竖向", landscape = "横向" }
 enum PhotoPlacement: String, CaseIterable { case fit = "完整留白", fill = "裁切铺满" }
+enum CaptionFont: String, CaseIterable, Codable {
+    case script = "手写", serif = "宋体", modern = "简约", rounded = "圆体"
+    func font(size: CGFloat) -> UIFont {
+        switch self {
+        case .script: return UIFont(name: "SnellRoundhand", size: size) ?? .italicSystemFont(ofSize: size)
+        case .serif:
+            return UIFont(name: "SongtiSC-Regular", size: size)
+                ?? UIFont(descriptor: UIFont.systemFont(ofSize: size).fontDescriptor.withDesign(.serif) ?? UIFont.systemFont(ofSize: size).fontDescriptor, size: size)
+        case .modern: return .systemFont(ofSize: size, weight: .medium)
+        case .rounded: return UIFont(descriptor: UIFont.systemFont(ofSize: size, weight: .semibold).fontDescriptor.withDesign(.rounded)
+            ?? UIFont.systemFont(ofSize: size).fontDescriptor, size: size)
+        }
+    }
+}
+
+enum CaptionColor: String, CaseIterable, Codable {
+    case ink = "墨绿", black = "黑", white = "白", wine = "酒红", gold = "金", pink = "粉"
+    var color: UIColor {
+        switch self {
+        case .ink: return UIColor(red: 0.26, green: 0.29, blue: 0.25, alpha: 1)
+        case .black: return UIColor(white: 0.12, alpha: 1)
+        case .white: return .white
+        case .wine: return UIColor(red: 0.52, green: 0.16, blue: 0.23, alpha: 1)
+        case .gold: return UIColor(red: 0.61, green: 0.45, blue: 0.20, alpha: 1)
+        case .pink: return UIColor(red: 0.77, green: 0.40, blue: 0.47, alpha: 1)
+        }
+    }
+}
+
+struct PhotoCaption: Identifiable, Codable {
+    var id = UUID()
+    var text = "我们的美好时刻"
+    var center = CGPoint(x: 0.5, y: 0.92)
+    var width: CGFloat = 0.7
+    var fontSize: CGFloat = 0.045
+    var font: CaptionFont = .serif
+    var color: CaptionColor = .ink
+
+    static var weddingTitle: PhotoCaption {
+        PhotoCaption(text: "Welcome to our wedding", center: CGPoint(x: 0.405, y: 0.083),
+                     width: 0.65, fontSize: 0.072, font: .script)
+    }
+}
+
 struct PhotoStyle {
     var aspect: PhotoAspect = .original
     var filter: PhotoFilter = .original
@@ -68,6 +177,11 @@ struct PhotoStyle {
     var mijiaPaperMode: MijiaPaperMode?
     var borderInset: CGFloat = 45
     var weddingTemplate: WeddingTemplate = .none
+    // nil uses a template's default title; [] deliberately removes all text.
+    var captions: [PhotoCaption]?
+    var resolvedCaptions: [PhotoCaption] {
+        captions ?? weddingTemplate.defaultCaptions
+    }
 }
 
 enum PhotoLayout: String, CaseIterable, Identifiable {
@@ -152,7 +266,7 @@ enum PrintLayoutRenderer {
         return image
     }
 
-    static func render(image: UIImage, layout: PhotoLayout, style: PhotoStyle = PhotoStyle(), previewScale: CGFloat = 1) -> UIImage {
+    static func render(image: UIImage, layout: PhotoLayout, style: PhotoStyle = PhotoStyle(), previewScale: CGFloat = 1, includeDecorations: Bool = true) -> UIImage {
         let image = photoWithoutPaper(image: image, style: style)
         let canvasSize = canvasSize(imageSize: image.size, style: style)
         let format = UIGraphicsImageRendererFormat()
@@ -160,6 +274,7 @@ enum PrintLayoutRenderer {
         format.opaque = true
 
         return UIGraphicsImageRenderer(size: canvasSize, format: format).image { context in
+            defer { if includeDecorations { drawCaptions(style.resolvedCaptions, canvasSize: canvasSize) } }
             style.frame.color.setFill()
             context.fill(CGRect(origin: .zero, size: canvasSize))
 
@@ -175,6 +290,17 @@ enum PrintLayoutRenderer {
                     context.cgContext.setLineWidth(0.5)
                     context.cgContext.stroke(rect)
                 }
+                return
+            }
+
+            if style.weddingTemplate.hasPhotoWindow {
+                // The photo fits inside the illustration's transparent opening, rather than
+                // placing artwork across a full-bleed face. Shared by live, save and print.
+                let window = style.weddingTemplate.photoWindow
+                let opening = CGRect(x: canvasSize.width * window.minX, y: canvasSize.height * window.minY,
+                                     width: canvasSize.width * window.width, height: canvasSize.height * window.height)
+                drawPhoto(image, in: opening, style: style)
+                if includeDecorations { drawWeddingTemplate(style.weddingTemplate, canvasSize: canvasSize, context: context.cgContext) }
                 return
             }
 
@@ -214,6 +340,17 @@ enum PrintLayoutRenderer {
                     drawBrand(in: CGRect(x: x, y: canvasSize.height - 120, width: stripWidth, height: 70), dark: style.frame == .black)
                 }
             }
+            if includeDecorations { drawWeddingTemplate(style.weddingTemplate, canvasSize: canvasSize, context: context.cgContext) }
+        }
+    }
+
+    /// Static artwork is rendered once at print resolution, independently of camera frames.
+    static func decorationImage(canvasSize: CGSize, style: PhotoStyle) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: canvasSize, format: format).image { context in
+            guard !style.printSize.isID else { return }
             drawWeddingTemplate(style.weddingTemplate, canvasSize: canvasSize, context: context.cgContext)
         }
     }
@@ -227,6 +364,36 @@ enum PrintLayoutRenderer {
             image.draw(in: CGRect(origin: .zero, size: image.size))
             drawWeddingTemplate(template, canvasSize: image.size, context: context.cgContext)
         }
+    }
+
+    static func captionRect(_ caption: PhotoCaption, canvasSize: CGSize) -> CGRect {
+        let width = canvasSize.width * caption.width
+        let font = caption.font.font(size: canvasSize.height * caption.fontSize)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        let measured = ((caption.text.isEmpty ? " " : caption.text) as NSString).boundingRect(
+            with: CGSize(width: width, height: canvasSize.height), options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font, .paragraphStyle: paragraph], context: nil)
+        let height = min(canvasSize.height, max(font.lineHeight, ceil(measured.height)))
+        let x = min(max(0, caption.center.x * canvasSize.width - width / 2), canvasSize.width - width)
+        let y = min(max(0, caption.center.y * canvasSize.height - height / 2), canvasSize.height - height)
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    private static func drawCaptions(_ captions: [PhotoCaption], canvasSize: CGSize) {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        for caption in captions where !caption.text.isEmpty {
+            (caption.text as NSString).draw(in: captionRect(caption, canvasSize: canvasSize), withAttributes: [
+                .font: caption.font.font(size: canvasSize.height * caption.fontSize),
+                .foregroundColor: caption.color.color, .paragraphStyle: paragraph
+            ])
+        }
+    }
+
+    private static func drawIllustratedFrame(_ template: WeddingTemplate, canvasSize: CGSize) {
+        guard let name = template.assetName else { return }
+        UIImage(named: name)?.draw(in: CGRect(origin: .zero, size: canvasSize))
     }
 
     private static func drawWeddingTemplate(_ template: WeddingTemplate, canvasSize: CGSize, context: CGContext) {
@@ -264,6 +431,37 @@ enum PrintLayoutRenderer {
         }
 
         switch template {
+        case .editorial, .analog, .instantPaper:
+            let window = template.photoWindow
+            let opening = CGRect(x: window.minX * width, y: window.minY * height,
+                                 width: window.width * width, height: window.height * height)
+            let paper: UIColor = template == .analog ? UIColor(white: 0.055, alpha: 1)
+                : (template == .instantPaper ? UIColor(red: 0.98, green: 0.955, blue: 0.90, alpha: 1) : .white)
+            paper.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: width, height: opening.minY))
+            context.fill(CGRect(x: 0, y: opening.maxY, width: width, height: height - opening.maxY))
+            context.fill(CGRect(x: 0, y: opening.minY, width: opening.minX, height: opening.height))
+            context.fill(CGRect(x: opening.maxX, y: opening.minY, width: width - opening.maxX, height: opening.height))
+            if template == .analog {
+                UIColor(red: 0.83, green: 0.78, blue: 0.67, alpha: 1).setFill()
+                for row in 0..<12 {
+                    let y = height * (0.08 + CGFloat(row) * 0.073)
+                    for x in [width * 0.021, width * 0.956] {
+                        UIBezierPath(roundedRect: CGRect(x: x, y: y, width: width * 0.023, height: height * 0.039), cornerRadius: 4 * unit).fill()
+                    }
+                }
+            } else {
+                context.setStrokeColor(UIColor(white: template == .editorial ? 0.15 : 0.78, alpha: 1).cgColor)
+                context.setLineWidth(0.8 * unit)
+                context.stroke(opening)
+                if template == .editorial {
+                    context.move(to: CGPoint(x: width * 0.045, y: height * 0.905))
+                    context.addLine(to: CGPoint(x: width * 0.955, y: height * 0.905))
+                    context.strokePath()
+                }
+            }
+        case .chineseFoil, .floralPhoto, .invitationIllustration, .blushIllustration, .gardenIllustration, .celebrationIllustration:
+            drawIllustratedFrame(template, canvasSize: canvasSize)
         case .none:
             break
         case .redGold:

@@ -64,7 +64,7 @@ final class PrinterService: ObservableObject {
         DispatchQueue.main.async { [weak self] in self?.checkPrinter() }
         #else
         mode = .mijiaShare
-        state = .success("点击“用米家打印”，边框与打印设置由米家完成")
+        state = .success("点击“用米家打印”分享当前成片，再在米家中确认相纸与打印")
         #endif
     }
 
@@ -349,7 +349,7 @@ final class PrinterService: ObservableObject {
     private func updateStateForMode() {
         switch mode {
         case .mijiaShare:
-            state = .success("点击“用米家打印”，边框与打印设置由米家完成")
+            state = .success("点击“用米家打印”分享当前成片，再在米家中确认相纸与打印")
         case .xiaomiUSB:
             checkXiaomiUSBPrinter()
         case .mock: state = .ready
