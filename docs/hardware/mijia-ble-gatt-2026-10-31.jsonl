@@ -1,0 +1,30 @@
+{"event": "authorization", "state": "allowedAlways"}
+{"authorization": "allowedAlways", "event": "bluetooth", "state": "poweredOn"}
+{"event": "scan_started", "mode": "inspect", "seconds": 15}
+{"event": "candidate", "isConnectable": true, "manufacturerDataLength": 0, "manufacturerID": null, "miBeaconFrameControl": "0x5910", "miBeaconProductID": 29841, "name": "米家桌面照片机 2（设备后缀已省略）", "serviceUUIDs": ["FE95"]}
+{"candidateCount": 1, "event": "scan_finished"}
+{"event": "inspection_started", "name": "米家桌面照片机 2（设备后缀已省略）", "seconds": 15}
+{"event": "connected", "name": "米家桌面照片机 2（设备后缀已省略）"}
+{"event": "service", "isPrimary": true, "uuid": "FE95"}
+{"event": "service", "isPrimary": true, "uuid": "00000100-0065-6C62-2E74-6F696D2E696D"}
+{"event": "characteristic", "properties": ["read"], "serviceUUID": "FE95", "uuid": "0004"}
+{"event": "characteristic", "properties": ["read", "notify"], "serviceUUID": "FE95", "uuid": "0005"}
+{"event": "characteristic", "properties": ["writeWithoutResponse", "notify"], "serviceUUID": "FE95", "uuid": "0010"}
+{"event": "characteristic", "properties": ["writeWithoutResponse", "notify"], "serviceUUID": "FE95", "uuid": "0019"}
+{"event": "characteristic", "properties": ["write", "notify"], "serviceUUID": "FE95", "uuid": "0017"}
+{"event": "characteristic", "properties": ["writeWithoutResponse", "notify"], "serviceUUID": "FE95", "uuid": "0018"}
+{"event": "characteristic", "properties": ["writeWithoutResponse", "notify"], "serviceUUID": "FE95", "uuid": "001A"}
+{"event": "characteristic", "properties": ["writeWithoutResponse", "notify"], "serviceUUID": "FE95", "uuid": "001B"}
+{"event": "characteristic", "properties": ["writeWithoutResponse", "notify"], "serviceUUID": "FE95", "uuid": "001C"}
+{"event": "characteristic", "properties": ["writeWithoutResponse"], "serviceUUID": "00000100-0065-6C62-2E74-6F696D2E696D", "uuid": "00000101-0065-6C62-2E74-6F696D2E696D"}
+{"event": "characteristic", "properties": ["notify"], "serviceUUID": "00000100-0065-6C62-2E74-6F696D2E696D", "uuid": "00000102-0065-6C62-2E74-6F696D2E696D"}
+{"characteristicUUID": "0005", "event": "descriptor", "serviceUUID": "FE95", "uuid": "2902"}
+{"characteristicUUID": "0010", "event": "descriptor", "serviceUUID": "FE95", "uuid": "2902"}
+{"characteristicUUID": "0019", "event": "descriptor", "serviceUUID": "FE95", "uuid": "2902"}
+{"characteristicUUID": "0017", "event": "descriptor", "serviceUUID": "FE95", "uuid": "2902"}
+{"characteristicUUID": "0018", "event": "descriptor", "serviceUUID": "FE95", "uuid": "2902"}
+{"characteristicUUID": "001A", "event": "descriptor", "serviceUUID": "FE95", "uuid": "2902"}
+{"characteristicUUID": "001B", "event": "descriptor", "serviceUUID": "FE95", "uuid": "2902"}
+{"characteristicUUID": "001C", "event": "descriptor", "serviceUUID": "FE95", "uuid": "2902"}
+{"characteristicUUID": "00000102-0065-6C62-2E74-6F696D2E696D", "event": "descriptor", "serviceUUID": "00000100-0065-6C62-2E74-6F696D2E696D", "uuid": "2902"}
+{"event": "finished", "exitCode": 0, "message": "服务、特征和描述符 UUID 枚举完成；未读写特征值。"}

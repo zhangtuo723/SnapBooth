@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A00000000000000000000019 /* BoothTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000019 /* BoothTheme.swift */; };
+		A00000000000000000000018 /* PrinterUSBDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000018 /* PrinterUSBDiagnostics.swift */; };
 		A00000000000000000000017 /* CanonUSBPTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000017 /* CanonUSBPTPClient.swift */; };
 		A00000000000000000000016 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000016 /* Assets.xcassets */; };
 		A00000000000000000000001 /* SnapBoothApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000001 /* SnapBoothApp.swift */; };
@@ -22,6 +24,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		B00000000000000000000019 /* BoothTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoothTheme.swift; sourceTree = "<group>"; };
+		B00000000000000000000018 /* PrinterUSBDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrinterUSBDiagnostics.swift; sourceTree = "<group>"; };
 		B00000000000000000000017 /* CanonUSBPTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanonUSBPTPClient.swift; sourceTree = "<group>"; };
 		B00000000000000000000016 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B00000000000000000000001 /* SnapBoothApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapBoothApp.swift; sourceTree = "<group>"; };
@@ -68,7 +72,9 @@
 				B00000000000000000000014 /* CanonCCAPIClient.swift */,
 				B00000000000000000000017 /* CanonUSBPTPClient.swift */,
 				B00000000000000000000004 /* CameraPreview.swift */,
+				B00000000000000000000019 /* BoothTheme.swift */,
 				B00000000000000000000005 /* PrinterService.swift */,
+				B00000000000000000000018 /* PrinterUSBDiagnostics.swift */,
 				B00000000000000000000006 /* PrintLayoutRenderer.swift */,
 				B00000000000000000000011 /* MijiaUSBBridge.swift */,
 				B00000000000000000000009 /* StandardPrintGeometry.swift */,
@@ -184,7 +190,9 @@
 				A00000000000000000000014 /* CanonCCAPIClient.swift in Sources */,
 				A00000000000000000000017 /* CanonUSBPTPClient.swift in Sources */,
 				A00000000000000000000004 /* CameraPreview.swift in Sources */,
+				A00000000000000000000019 /* BoothTheme.swift in Sources */,
 				A00000000000000000000005 /* PrinterService.swift in Sources */,
+				A00000000000000000000018 /* PrinterUSBDiagnostics.swift in Sources */,
 				A00000000000000000000006 /* PrintLayoutRenderer.swift in Sources */,
 				A00000000000000000000011 /* MijiaUSBBridge.swift in Sources */,
 				A00000000000000000000009 /* StandardPrintGeometry.swift in Sources */,
@@ -238,13 +246,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 39;
 				DEVELOPMENT_TEAM = J45VHTZ8L6;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SnapBooth/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.5.4;
+				MARKETING_VERSION = 0.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.snapbooth.ipad;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
@@ -260,13 +268,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 39;
 				DEVELOPMENT_TEAM = J45VHTZ8L6;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SnapBooth/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 0.5.4;
+				MARKETING_VERSION = 0.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = app.snapbooth.ipad;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key><string>app.snapbooth.bleprobe</string>
+    <key>CFBundleName</key><string>SnapBooth BLE Probe</string>
+    <key>CFBundleExecutable</key><string>PrinterBLEProbe</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleShortVersionString</key><string>1.0</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>只读检测照片打印机的蓝牙广播及服务、特征和描述符 UUID，不读取或写入特征值。</string>
+</dict>
+</plist>

@@ -1,18 +1,6 @@
 import UIKit
 import CoreImage
 
-enum PhotoAspect: String, CaseIterable {
-    case original = "原始", square = "1:1", portrait = "3:4", film = "2:3", wide = "16:9"
-    var ratio: CGFloat? {
-        switch self {
-        case .original: return nil
-        case .square: return 1
-        case .portrait: return 3 / 4
-        case .film: return 2 / 3
-        case .wide: return 16 / 9
-        }
-    }
-}
 enum PhotoFilter: String, CaseIterable {
     case original = "原片", warm = "暖阳", cool = "清透", fade = "胶片", mono = "黑白", instant = "复古"
     var ciName: String? {
@@ -43,12 +31,12 @@ enum WeddingTemplate: String, CaseIterable {
     case editorial = "时刻杂志"
     case analog = "复古暗房"
     case instantPaper = "奶油拍立得"
-    case chineseFoil = "朱红金囍"
+    case chineseFoil = "朱砂金线"
     case floralPhoto = "白玫瑰之约"
-    case invitationIllustration = "婚礼请柬"
-    case blushIllustration = "怦然心动"
-    case gardenIllustration = "奶油花园"
-    case celebrationIllustration = "晴空派对"
+    case invitationIllustration = "誓言留白"
+    case blushIllustration = "柔雾玫瑰"
+    case gardenIllustration = "鼠尾草花园"
+    case celebrationIllustration = "晴蓝金线"
     case none = "纯净"
 
     static var curated: [WeddingTemplate] { [.editorial, .analog, .instantPaper, .chineseFoil, .floralPhoto, .invitationIllustration, .blushIllustration, .gardenIllustration, .celebrationIllustration, .none] }
@@ -59,12 +47,12 @@ enum WeddingTemplate: String, CaseIterable {
         switch self {
         case .invitationIllustration: return [.weddingTitle]
         case .editorial: return [
-            PhotoCaption(text: "THE MOMENT", center: CGPoint(x: 0.5, y: 0.09), width: 0.9, fontSize: 0.105, font: .serif, color: .black),
-            PhotoCaption(text: "A STORY WORTH KEEPING", center: CGPoint(x: 0.5, y: 0.935), width: 0.8, fontSize: 0.023, font: .modern, color: .black)]
-        case .analog: return [PhotoCaption(text: "GOOD TIMES · FOREVER", center: CGPoint(x: 0.5, y: 0.935), width: 0.75, fontSize: 0.03, font: .modern, color: .gold)]
-        case .instantPaper: return [PhotoCaption(text: "a little moment of happiness", center: CGPoint(x: 0.5, y: 0.9), width: 0.8, fontSize: 0.062, font: .script)]
-        case .chineseFoil: return [PhotoCaption(text: "囍 · 良辰与共", center: CGPoint(x: 0.5, y: 0.063), width: 0.64, fontSize: 0.053, font: .serif, color: .white)]
-        case .floralPhoto: return [PhotoCaption(text: "forever starts here", center: CGPoint(x: 0.5, y: 0.94), width: 0.52, fontSize: 0.04, font: .script)]
+            PhotoCaption(text: "THE MOMENT", center: CGPoint(x: 0.5, y: 0.048), width: 0.9, fontSize: 0.065, font: .serif, color: .black),
+            PhotoCaption(text: "A STORY WORTH KEEPING", center: CGPoint(x: 0.5, y: 0.955), width: 0.8, fontSize: 0.020, font: .modern, color: .black)]
+        case .analog: return [PhotoCaption(text: "GOOD TIMES · FOREVER", center: CGPoint(x: 0.5, y: 0.95), width: 0.75, fontSize: 0.025, font: .modern, color: .gold)]
+        case .instantPaper: return [PhotoCaption(text: "a little moment of happiness", center: CGPoint(x: 0.5, y: 0.95), width: 0.8, fontSize: 0.045, font: .script)]
+        case .chineseFoil: return [PhotoCaption(text: "囍 · 良辰与共", center: CGPoint(x: 0.5, y: 0.05), width: 0.64, fontSize: 0.045, font: .serif, color: .white)]
+        case .floralPhoto: return [PhotoCaption(text: "forever starts here", center: CGPoint(x: 0.5, y: 0.955), width: 0.52, fontSize: 0.03, font: .script)]
         default: return []
         }
     }
@@ -80,29 +68,20 @@ enum WeddingTemplate: String, CaseIterable {
         }
     }
     var photoWindow: CGRect {
-        switch self {
-        case .editorial: return CGRect(x: 0.045, y: 0.19, width: 0.91, height: 0.68)
-        case .analog: return CGRect(x: 0.075, y: 0.11, width: 0.85, height: 0.76)
-        case .instantPaper: return CGRect(x: 0.055, y: 0.06, width: 0.89, height: 0.72)
-        case .chineseFoil: return CGRect(x: 0.084, y: 0.129, width: 0.832, height: 0.715)
-        case .floralPhoto: return CGRect(x: 0.07, y: 0.095, width: 0.863, height: 0.775)
-        case .invitationIllustration: return CGRect(x: 0.034, y: 0.157, width: 0.727, height: 0.713)
-        case .gardenIllustration: return CGRect(x: 0.087, y: 0.11, width: 0.826, height: 0.75)
-        case .celebrationIllustration: return CGRect(x: 0.089, y: 0.131, width: 0.824, height: 0.738)
-        default: return CGRect(x: 0.082, y: 0.118, width: 0.836, height: 0.762)
-        }
+        // Equal normalized dimensions give a 3:2 aperture on the 3:2 print canvas.
+        CGRect(x: 0.10, y: 0.10, width: 0.80, height: 0.80)
     }
     var detail: String {
         switch self {
         case .editorial: return "杂志风 · 黑白排版与留白"
         case .analog: return "胶片风 · 暗房黑与齿孔"
         case .instantPaper: return "韩式拍立得 · 奶油纸与手写落款"
-        case .chineseFoil: return "中式婚礼 · 朱红与金箔窗棂"
-        case .floralPhoto: return "摄影花艺 · 真实玫瑰与丝绸"
-        case .invitationIllustration: return "手绘新人 · 请柬式留白"
-        case .blushIllustration: return "粉色缎带 · 手绘婚礼"
-        case .gardenIllustration: return "奶油纸感 · 白花绿叶"
-        case .celebrationIllustration: return "晴空蓝 · 气球与星光"
+        case .chineseFoil: return "朱砂红 · 克制金线"
+        case .floralPhoto: return "暖白棉纸 · 白玫瑰"
+        case .invitationIllustration: return "象牙白 · 细叶与金线"
+        case .blushIllustration: return "柔雾粉 · 玫瑰与纸感"
+        case .gardenIllustration: return "鼠尾草绿 · 自然花叶"
+        case .celebrationIllustration: return "淡晴蓝 · 花材与细金线"
         default: return "简约留白 · 自选边框"
         }
     }
@@ -119,7 +98,7 @@ enum WeddingTemplate: String, CaseIterable {
     case minimal = "极简落款"
 }
 enum PaperDirection: String, CaseIterable { case auto = "自动", portrait = "竖向", landscape = "横向" }
-enum PhotoPlacement: String, CaseIterable { case fit = "完整留白", fill = "裁切铺满" }
+enum PhotoPlacement: String, CaseIterable { case fit = "完整画面", fill = "铺满裁切" }
 enum CaptionFont: String, CaseIterable, Codable {
     case script = "手写", serif = "宋体", modern = "简约", rounded = "圆体"
     func font(size: CGFloat) -> UIFont {
@@ -159,13 +138,12 @@ struct PhotoCaption: Identifiable, Codable {
     var color: CaptionColor = .ink
 
     static var weddingTitle: PhotoCaption {
-        PhotoCaption(text: "Welcome to our wedding", center: CGPoint(x: 0.405, y: 0.083),
-                     width: 0.65, fontSize: 0.072, font: .script)
+        PhotoCaption(text: "Welcome to our wedding", center: CGPoint(x: 0.5, y: 0.047),
+                     width: 0.8, fontSize: 0.048, font: .script)
     }
 }
 
 struct PhotoStyle {
-    var aspect: PhotoAspect = .original
     var filter: PhotoFilter = .original
     var frame: PhotoFrame = .white
     var intensity: Float = 1
@@ -195,15 +173,15 @@ enum PhotoLayout: String, CaseIterable, Identifiable {
 enum PrintLayoutRenderer {
     private static let ciContext = CIContext()
     static func edited(_ image: UIImage, style: PhotoStyle) -> UIImage {
-        // Normalize orientation before cropping and filtering.
+        // Preserve ordinary photos in full. Only ID photos require a fixed crop.
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         let normalized = UIGraphicsImageRenderer(size: image.size, format: format).image { _ in
             image.draw(in: CGRect(origin: .zero, size: image.size))
         }
         guard var cg = normalized.cgImage else { return image }
-        let standardRatio = style.printSize.isID ? style.printSize.millimeters.map { $0.width / $0.height } : nil
-        if let ratio = standardRatio ?? style.aspect.ratio {
+        if style.printSize.isID, let size = style.printSize.millimeters {
+            let ratio = size.width / size.height
             let width = CGFloat(cg.width), height = CGFloat(cg.height)
             let cropW = min(width, height * ratio)
             let cropH = min(height, width / ratio)
@@ -246,6 +224,26 @@ enum PrintLayoutRenderer {
             paper = CGSize(width: paper.height, height: paper.width)
         }
         return StandardPrintGeometry.cells(paper: paper, photo: size)
+    }
+
+    /// The ordinary photo aperture, shared by rendering, decorations and previews.
+    static func photoRect(canvasSize: CGSize, style: PhotoStyle) -> CGRect {
+        let bounds: CGRect
+        if style.weddingTemplate.hasPhotoWindow {
+            let window = style.weddingTemplate.photoWindow
+            bounds = CGRect(x: canvasSize.width * window.minX, y: canvasSize.height * window.minY,
+                            width: canvasSize.width * window.width, height: canvasSize.height * window.height)
+        } else {
+            bounds = CGRect(origin: .zero, size: canvasSize).insetBy(dx: style.borderInset, dy: style.borderInset)
+        }
+        return threeByTwoRect(in: bounds)
+    }
+
+    private static func threeByTwoRect(in bounds: CGRect) -> CGRect {
+        guard bounds.width > 0, bounds.height > 0 else { return .zero }
+        let width = min(bounds.width, bounds.height * 1.5)
+        let height = width / 1.5
+        return CGRect(x: bounds.midX - width / 2, y: bounds.midY - height / 2, width: width, height: height)
     }
 
     /// Photo edits only; the receiving app owns paper size, borders and templates.
@@ -296,9 +294,7 @@ enum PrintLayoutRenderer {
             if style.weddingTemplate.hasPhotoWindow {
                 // The photo fits inside the illustration's transparent opening, rather than
                 // placing artwork across a full-bleed face. Shared by live, save and print.
-                let window = style.weddingTemplate.photoWindow
-                let opening = CGRect(x: canvasSize.width * window.minX, y: canvasSize.height * window.minY,
-                                     width: canvasSize.width * window.width, height: canvasSize.height * window.height)
+                let opening = photoRect(canvasSize: canvasSize, style: style)
                 drawPhoto(image, in: opening, style: style)
                 if includeDecorations { drawWeddingTemplate(style.weddingTemplate, canvasSize: canvasSize, context: context.cgContext) }
                 return
@@ -308,7 +304,7 @@ enum PrintLayoutRenderer {
             case .full:
                 drawPhoto(
                     image,
-                    in: CGRect(origin: .zero, size: canvasSize).insetBy(dx: style.borderInset, dy: style.borderInset),
+                    in: photoRect(canvasSize: canvasSize, style: style),
                     style: style
                 )
             case .grid:
@@ -393,6 +389,16 @@ enum PrintLayoutRenderer {
 
     private static func drawIllustratedFrame(_ template: WeddingTemplate, canvasSize: CGSize) {
         guard let name = template.assetName else { return }
+        let paper: UIColor
+        switch template {
+        case .chineseFoil: paper = UIColor(red: 0.54, green: 0.12, blue: 0.10, alpha: 1)
+        case .blushIllustration: paper = UIColor(red: 0.98, green: 0.94, blue: 0.93, alpha: 1)
+        case .gardenIllustration: paper = UIColor(red: 0.94, green: 0.96, blue: 0.92, alpha: 1)
+        case .celebrationIllustration: paper = UIColor(red: 0.93, green: 0.96, blue: 0.98, alpha: 1)
+        default: paper = UIColor(red: 0.98, green: 0.97, blue: 0.94, alpha: 1)
+        }
+        paper.setFill()
+        UIRectFill(CGRect(origin: .zero, size: canvasSize))
         UIImage(named: name)?.draw(in: CGRect(origin: .zero, size: canvasSize))
     }
 
@@ -402,6 +408,15 @@ enum PrintLayoutRenderer {
         let height = canvasSize.height
         let unit = min(width, height) / 1200
         context.saveGState()
+        if template.hasPhotoWindow {
+            var frameStyle = PhotoStyle()
+            frameStyle.weddingTemplate = template
+            let opening = photoRect(canvasSize: canvasSize, style: frameStyle)
+            context.beginPath()
+            context.addRect(CGRect(origin: .zero, size: canvasSize))
+            context.addRect(opening)
+            context.clip(using: .evenOdd)
+        }
 
         func draw(_ text: String, rect: CGRect, size: CGFloat, color: UIColor, weight: UIFont.Weight = .semibold, alignment: NSTextAlignment = .center) {
             let paragraph = NSMutableParagraphStyle()
@@ -432,9 +447,9 @@ enum PrintLayoutRenderer {
 
         switch template {
         case .editorial, .analog, .instantPaper:
-            let window = template.photoWindow
-            let opening = CGRect(x: window.minX * width, y: window.minY * height,
-                                 width: window.width * width, height: window.height * height)
+            var frameStyle = PhotoStyle()
+            frameStyle.weddingTemplate = template
+            let opening = photoRect(canvasSize: canvasSize, style: frameStyle)
             let paper: UIColor = template == .analog ? UIColor(white: 0.055, alpha: 1)
                 : (template == .instantPaper ? UIColor(red: 0.98, green: 0.955, blue: 0.90, alpha: 1) : .white)
             paper.setFill()

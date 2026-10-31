@@ -9,6 +9,10 @@ struct SnapBoothApp: App {
         WindowGroup {
             MacBoothView(camera: camera, printer: printer)
                 .preferredColorScheme(.light)
+                #if !targetEnvironment(macCatalyst)
+                .statusBarHidden(true)
+                .persistentSystemOverlays(.hidden)
+                #endif
         }
     }
 }

@@ -47,7 +47,7 @@ enum PhotoPrintSize: String, CaseIterable {
     }
     var detail: String {
         switch self {
-        case .auto: return "自由画幅 · 使用下方排版"
+        case .auto: return "自由尺寸 · 使用下方排版"
         case .one: return "1寸 · 25×35 mm"
         case .two: return "2寸 · 35×49 mm"
         case .three: return "3寸 · 50×76 mm（口袋相纸）"

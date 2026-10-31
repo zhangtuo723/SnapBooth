@@ -14,11 +14,11 @@ final class CameraService: NSObject, ObservableObject {
 
         var description: String {
             switch self {
-            case .idle: return "尚未启动"
-            case .requestingPermission: return "正在请求权限"
-            case .ready: return "已连接"
-            case .remoteReady(let name): return "\(name) · 真快门/闪光"
-            case .denied: return "相机权限未开启"
+            case .idle: return "相机未启动"
+            case .requestingPermission: return "请允许使用相机"
+            case .ready: return "相机已就绪"
+            case .remoteReady(let name): return name
+            case .denied: return "请在设置中开启相机权限"
             case .unavailable(let reason): return reason
             }
         }
@@ -104,7 +104,7 @@ final class CameraService: NSObject, ObservableObject {
             return
         }
         #if targetEnvironment(simulator)
-        state = .unavailable("模拟器无相机，请使用示例图片")
+        state = .unavailable("模拟器无法拍照，请使用示例照片")
         return
         #endif
         #if targetEnvironment(macCatalyst)
@@ -287,7 +287,7 @@ final class CameraService: NSObject, ObservableObject {
             self.remoteCaptureInProgress = true
             self.cancelRemotePreviewOnQueue()
             DispatchQueue.main.async {
-                self.state = .unavailable("正在读取相机里的最近照片…")
+                self.state = .unavailable("正在读取最近一张照片…")
             }
             let result: Result<UIImage, Error>
             do {
@@ -301,7 +301,7 @@ final class CameraService: NSObject, ObservableObject {
                     self.capturedImage = image
                     self.state = .remoteReady("佳能 R50 V")
                 } else if case .failure(let error) = result {
-                    self.state = .remoteReady("读取失败：\(error.localizedDescription)")
+                    self.state = .remoteReady("读取照片失败：\(error.localizedDescription)")
                     self.startRemotePreview()
                 }
                 completion(result)
@@ -362,7 +362,7 @@ final class CameraService: NSObject, ObservableObject {
             guard let device = devices.first(where: { $0.uniqueID == selectedID })
                     ?? devices.first(where: { $0.position == .back })
                     ?? devices.first else {
-                DispatchQueue.main.async { self.state = .unavailable("未发现可用相机") }
+                DispatchQueue.main.async { self.state = .unavailable("未找到相机，请检查连接") }
                 return
             }
 
@@ -473,7 +473,7 @@ final class CameraService: NSObject, ObservableObject {
             guard let self, self.session.isRunning else { return }
             self.session.stopRunning()
         }
-        state = .unavailable("正在通过 Wi-Fi 连接佳能 R50 V…")
+        state = .unavailable("正在连接佳能 R50 V（Wi-Fi）…")
         ccapiActivationTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -535,7 +535,7 @@ final class CameraService: NSObject, ObservableObject {
         }
         ccapiCaptureInProgress = true
         stopCCAPIPreview()
-        state = .unavailable("正在曝光并等待相机写卡，长曝光完成后会自动读取…")
+        state = .unavailable("正在拍照，请等待相机完成曝光…")
         ccapiCaptureTask = Task { [weak self] in
             guard let self else { return }
             let result: Result<UIImage, Error>
@@ -560,7 +560,7 @@ final class CameraService: NSObject, ObservableObject {
                     self.capturedImage = image
                     self.state = .remoteReady("佳能 EOS R50 V")
                 case .failure(let error):
-                    self.state = .unavailable("拍摄失败：\(error.localizedDescription)")
+                    self.state = .unavailable("拍照失败：\(error.localizedDescription)")
                     self.startCCAPIPreview()
                 }
                 completion(result)
@@ -575,7 +575,7 @@ final class CameraService: NSObject, ObservableObject {
         }
         ccapiCaptureInProgress = true
         stopCCAPIPreview()
-        state = .unavailable("正在读取佳能相机里的最近照片…")
+        state = .unavailable("正在读取佳能相机的最近照片…")
         Task { [weak self] in
             guard let self else { return }
             let result: Result<UIImage, Error>
@@ -588,7 +588,7 @@ final class CameraService: NSObject, ObservableObject {
                     self.capturedImage = image
                     self.state = .remoteReady("佳能 EOS R50 V")
                 case .failure(let error):
-                    self.state = .unavailable("读取失败：\(error.localizedDescription)")
+                    self.state = .unavailable("读取照片失败：\(error.localizedDescription)")
                     self.startCCAPIPreview()
                 }
                 completion(result)
@@ -612,7 +612,7 @@ final class CameraService: NSObject, ObservableObject {
             self.remoteCaptureInProgress = true
             self.cancelRemotePreviewOnQueue()
             DispatchQueue.main.async {
-                self.state = .unavailable("正在触发佳能真快门与闪光灯…")
+                self.state = .unavailable("正在用佳能相机拍照…")
             }
             let result: Result<UIImage, Error>
             do {
@@ -626,7 +626,7 @@ final class CameraService: NSObject, ObservableObject {
                     self.capturedImage = image
                     self.state = .remoteReady("佳能 R50 V")
                 } else if case .failure(let error) = result {
-                    self.state = .remoteReady("拍摄失败：\(error.localizedDescription)")
+                    self.state = .remoteReady("拍照失败：\(error.localizedDescription)")
                     self.startRemotePreview()
                 }
                 completion(result)
@@ -720,9 +720,9 @@ private enum CameraError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notReady: return "相机尚未准备好"
+        case .notReady: return "相机尚未就绪，请稍候"
         case .cannotAddInput: return "无法连接所选相机"
-        case .cannotAddOutput: return "无法配置照片输出"
+        case .cannotAddOutput: return "相机无法准备拍照，请重新连接"
         case .invalidPhotoData: return "未能生成照片"
         case .captureInProgress: return "上一张照片仍在读取，请稍候"
         }

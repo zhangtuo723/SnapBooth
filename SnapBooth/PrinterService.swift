@@ -5,9 +5,9 @@ import OSLog
 
 final class PrinterService: ObservableObject {
     enum Mode: String, CaseIterable, Identifiable {
-        case xiaomiUSB = "米家 USB"
-        case mijiaShare = "米家 App"
-        case mock = "模拟打印"
+        case xiaomiUSB = "USB 打印"
+        case mijiaShare = "米家打印"
+        case mock = "存到文件"
         case airPrint = "AirPrint"
 
         var id: String { rawValue }
@@ -31,10 +31,10 @@ final class PrinterService: ObservableObject {
 
         var description: String {
             switch self {
-            case .idle: return "尚未选择打印机"
+            case .idle: return "请选择打印机"
             case .checking: return "正在检查打印机"
-            case .ready: return "打印机在线"
-            case .printing: return "正在发送打印任务"
+            case .ready: return "已就绪"
+            case .printing: return "正在处理照片…"
             case .success(let message): return message
             case .failed(let message): return message
             }
@@ -64,7 +64,7 @@ final class PrinterService: ObservableObject {
         DispatchQueue.main.async { [weak self] in self?.checkPrinter() }
         #else
         mode = .mijiaShare
-        state = .success("点击“用米家打印”分享当前成片，再在米家中确认相纸与打印")
+        state = .success("点“去米家打印”，在米家中确认打印")
         #endif
     }
 
@@ -74,7 +74,7 @@ final class PrinterService: ObservableObject {
 
     func choosePrinter() {
         #if targetEnvironment(macCatalyst)
-        state = .success("点击打印照片，在系统窗口中选择打印机")
+        state = .success("打印时选择打印机")
         return
         #else
         let picker = UIPrinterPickerController(initiallySelectedPrinter: selectedPrinter)
@@ -100,7 +100,7 @@ final class PrinterService: ObservableObject {
             return
         }
         #if targetEnvironment(macCatalyst)
-        state = mode == .mock ? .ready : .success("打印时在系统窗口选择打印机")
+        state = mode == .mock ? .ready : .success("打印时选择打印机")
         return
         #else
         guard mode == .airPrint else {
@@ -144,7 +144,7 @@ final class PrinterService: ObservableObject {
         var host = presenter ?? scene?.windows.first(where: \.isKeyWindow)?.rootViewController
         while let presented = host?.presentedViewController { host = presented }
         guard let host, host.viewIfLoaded?.window != nil, !host.isBeingDismissed else {
-            state = .failed("无法打开分享面板，请返回照片编辑页重试")
+            state = .failed("无法分享，请返回照片页重试")
             return
         }
         state = .printing
@@ -180,8 +180,8 @@ final class PrinterService: ObservableObject {
                                 self?.state = .failed("照片分享失败：\(error.localizedDescription)")
                             } else {
                                 self?.state = .success(completed
-                                    ? "照片分享已完成；是否打印成功请在米家中查看"
-                                    : "已取消分享，当前照片仍保留")
+                                    ? "照片已分享，请在米家中确认打印"
+                                    : "已取消分享，照片仍保留")
                             }
                         }
                     }
@@ -191,7 +191,7 @@ final class PrinterService: ObservableObject {
                 }
             } catch {
                 try? FileManager.default.removeItem(at: url)
-                DispatchQueue.main.async { self?.state = .failed("准备分享照片失败：\(error.localizedDescription)") }
+                DispatchQueue.main.async { self?.state = .failed("无法准备照片：\(error.localizedDescription)") }
             }
         }
     }
@@ -225,11 +225,11 @@ final class PrinterService: ObservableObject {
                 try (data as Data).write(to: url, options: .atomic)
                 DispatchQueue.main.async {
                     self?.lastMockPrintURL = url
-                    self?.state = .success("模拟打印完成")
+                    self?.state = .success("照片已保存到 App 文件")
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self?.state = .failed("模拟打印失败：\(error.localizedDescription)")
+                    self?.state = .failed("保存照片失败：\(error.localizedDescription)")
                 }
             }
         }
@@ -244,17 +244,17 @@ final class PrinterService: ObservableObject {
                 let status = try MijiaUSBBridge.status()
                 DispatchQueue.main.async {
                     self?.state = status.isReady
-                        ? .success("米家桌面照片打印机 2 · USB 在线 · 固件 \(status.firmware) · 无告警")
+                        ? .success("米家桌面照片打印机 2 已连接")
                         : .failed("打印机告警 \(status.alert)，请检查相纸、色带和舱门")
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self?.state = .failed("米家 USB 未就绪：\(error.localizedDescription)")
+                    self?.state = .failed("USB 打印机不可用：\(error.localizedDescription)")
                 }
             }
         }
         #else
-        state = .failed("米家 USB 直连当前仅在 Mac 版可用")
+        state = .failed("USB 打印仅支持 Mac")
         #endif
     }
 
@@ -268,18 +268,18 @@ final class PrinterService: ObservableObject {
             do {
                 let data = try Self.mijiaJPEGData(image: image)
                 try data.write(to: url, options: .atomic)
-                let jobID = try MijiaUSBBridge.printSixInchJPEG(at: url)
+                _ = try MijiaUSBBridge.printSixInchJPEG(at: url)
                 DispatchQueue.main.async {
-                    self?.state = .success("米家打印完成 · 任务 #\(jobID)")
+                    self?.state = .success("照片已打印")
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self?.state = .failed("米家 USB 打印失败：\(error.localizedDescription)")
+                    self?.state = .failed("USB 打印失败：\(error.localizedDescription)")
                 }
             }
         }
         #else
-        state = .failed("米家 USB 直连当前仅在 Mac 版可用")
+        state = .failed("USB 打印仅支持 Mac")
         #endif
     }
 
@@ -313,7 +313,7 @@ final class PrinterService: ObservableObject {
         state = .printing
         let controller = UIPrintInteractionController.shared
         let info = UIPrintInfo(dictionary: nil)
-        info.jobName = "SnapBooth Photo"
+        info.jobName = "SnapBooth 照片"
         info.outputType = .photo
         info.orientation = image.size.width > image.size.height ? .landscape : .portrait
         controller.printInfo = info
@@ -326,14 +326,14 @@ final class PrinterService: ObservableObject {
                 } else if completed {
                     self?.state = .success("照片已发送至打印机")
                 } else {
-                    self?.state = .failed("打印任务已取消")
+                    self?.state = .failed("已取消打印")
                 }
             }
         }
         #if targetEnvironment(macCatalyst)
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
               let view = scene.windows.first(where: \.isKeyWindow)?.rootViewController?.view else {
-            state = .failed("未找到打印窗口，请返回 App 再试")
+            state = .failed("请返回 App 后重试打印")
             return
         }
         if !controller.present(from: CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1), in: view, animated: true, completionHandler: completion) {
@@ -341,7 +341,7 @@ final class PrinterService: ObservableObject {
         }
         #else
         if !controller.print(to: selectedPrinter, completionHandler: completion) {
-            state = .failed("无法启动打印任务")
+            state = .failed("无法开始打印，请重试")
         }
         #endif
     }
@@ -349,13 +349,13 @@ final class PrinterService: ObservableObject {
     private func updateStateForMode() {
         switch mode {
         case .mijiaShare:
-            state = .success("点击“用米家打印”分享当前成片，再在米家中确认相纸与打印")
+            state = .success("点“去米家打印”，在米家中确认打印")
         case .xiaomiUSB:
             checkXiaomiUSBPrinter()
         case .mock: state = .ready
         case .airPrint:
             #if targetEnvironment(macCatalyst)
-            state = .success("打印时在系统窗口选择打印机")
+            state = .success("打印时选择打印机")
             #else
             state = selectedPrinter == nil ? .idle : .ready
             #endif
@@ -407,5 +407,5 @@ private enum MijiaShareDiagnostics {
 private enum PrinterError: LocalizedError {
     case encodingFailed
 
-    var errorDescription: String? { "无法编码打印图片" }
+    var errorDescription: String? { "无法处理这张照片，请重试" }
 }

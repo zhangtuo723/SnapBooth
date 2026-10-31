@@ -66,7 +66,7 @@ struct CameraPreview: UIViewRepresentable {
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
         DispatchQueue.main.async { view.videoPreviewLayer.session = session }
-        view.videoPreviewLayer.videoGravity = .resizeAspectFill
+        view.videoPreviewLayer.videoGravity = .resizeAspect
         return view
     }
 
@@ -117,14 +117,24 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
     private let retake = UIButton(type: .system)
     private let printButton = UIButton(type: .system)
     private let saveStatus = UILabel()
+    private let saveCurrent = UIButton(type: .system)
     private var saving = false
+    private var savedRevision: Int?
+    private var savingRevision = 0
     private let printerChoice = UIButton(type: .system)
     private let layout = UISegmentedControl(items: PhotoLayout.allCases.map(\.rawValue))
     private let mode = UISegmentedControl(items: PrinterService.Mode.available.map(\.rawValue))
-    private let aspect = UISegmentedControl(items: PhotoAspect.allCases.map(\.rawValue))
     private let filter = UISegmentedControl(items: PhotoFilter.allCases.map(\.rawValue))
     private let frame = UISegmentedControl(items: PhotoFrame.allCases.map(\.rawValue))
     private let strength = UISlider()
+    private let intensityControls = UIStackView()
+    private let filterChoice = UIButton(type: .system)
+    private let moreAdjustments = UIStackView()
+    private let flexibleFormat = UIStackView()
+    private let exportButton = UIButton(type: .system)
+    private let deliveryHint = UILabel()
+    private let printingHelp = UILabel()
+    private let printingDetail = UILabel()
     private let paper = UIButton(type: .system)
     private var selectedPaper = PaperSize.xiaomiSix
     private let sizeInfo = UILabel()
@@ -137,6 +147,8 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
     private let stage = UIView()
     private let stageLabel = UILabel()
     private let shooting = UIStackView()
+    private var toolbarHeight: NSLayoutConstraint!
+    private var actionWidth: NSLayoutConstraint!
     private let actionButtons = UIStackView()
     private let toolbarSpacer = UIView()
     private let countdownLabel = CountdownBadgeView()
@@ -148,19 +160,26 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
     private let root = UIStackView()
     private let scroll = UIScrollView()
     private let inspector = UIStackView()
-    private let inspectorTabs = UISegmentedControl(items: ["照片", "设备", "输出"])
+    private let identity = UIStackView()
+    private var savePanel: UIView!
+    private let inspectorTabs = UISegmentedControl(items: ["照片", "相机", "打印"])
     private var inspectorPages: [UIView] = []
     private let previewHint = UILabel()
+    private let previewPrompt = UIStackView()
     private let welcomeCover = UIView()
     private let welcomeImage = UIImageView()
+    private let welcomeVeil = UIView()
     private let welcomeMark = UILabel()
     private let welcomeEyebrow = UILabel()
     private let welcomeHeading = UILabel()
     private let welcomeSubtitle = UILabel()
     private let welcomeStart = UIButton(type: .system)
     private let homeButton = UIButton(type: .system)
+    private let settingsToggle = UIButton(type: .system)
+    private var settingsExpanded = true
     private let homeEditor = UIView()
     private let homeEditorPreviewImage = UIImageView()
+    private let homeEditorVeil = UIView()
     private let homeEditorMark = UILabel()
     private let homeEditorEyebrow = UILabel()
     private let homeEditorHeading = UILabel()
@@ -193,13 +212,16 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
     private var renderRevision = 0
     private var rendering = false
     private var renderingLive = false
-    private let accent = UIColor(red: 0.28, green: 0.32, blue: 0.88, alpha: 1)
+    private let accent = BoothTheme.accent
     private var subscriptions = Set<AnyCancellable>()
     private var countdown: Task<Void, Never>?
     private var busy = false
     private var printable: UIImage?
     private var expectingCameraCapture = false
     private var pendingAutoSave = false
+    #if DEBUG && !targetEnvironment(macCatalyst) && !targetEnvironment(simulator)
+    private var didShowPrinterUSBDiagnostics = false
+    #endif
     
     init(camera: CameraService, printer: PrinterService) {
         self.camera = camera
@@ -210,16 +232,21 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(red: 0.95, green: 0.96, blue: 0.98, alpha: 1)
+        view.backgroundColor = BoothTheme.canvas
         view.tintColor = accent
         overrideUserInterfaceStyle = .light
         let title = UILabel()
-        title.text = "SnapBooth."
-        title.font = .systemFont(ofSize: 28, weight: .bold)
-        title.textColor = UIColor(white: 0.12, alpha: 1)
+        title.text = "SnapBooth"
+        title.font = .systemFont(ofSize: 24, weight: .semibold)
+        title.textColor = BoothTheme.ink
+        [status, printerStatus].forEach {
+            $0.font = .preferredFont(forTextStyle: .subheadline)
+            $0.adjustsFontForContentSizeCategory = true
+            $0.textColor = BoothTheme.secondary
+        }
         status.numberOfLines = 0
         printerStatus.numberOfLines = 0
-        live.videoPreviewLayer.videoGravity = .resizeAspectFill
+        live.videoPreviewLayer.videoGravity = .resizeAspect
         live.backgroundColor = .black
         live.layer.cornerRadius = 20
         live.clipsToBounds = true
@@ -247,7 +274,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         installCaptureLoadingOverlay()
         layout.selectedSegmentIndex = 0
         mode.selectedSegmentIndex = PrinterService.Mode.available.firstIndex(of: printer.mode) ?? 0
-        [aspect, filter, frame, placement, printSize, rotation].forEach { $0.selectedSegmentIndex = 0 }
+        [filter, frame, placement, printSize, rotation].forEach { $0.selectedSegmentIndex = 0 }
         direction.selectedSegmentIndex = PaperDirection.allCases.firstIndex(of: .landscape)!
         configure(paper, selectedPaper.rawValue) { }
         paper.showsMenuAsPrimaryAction = true
@@ -255,20 +282,21 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
             UIAction(title: value.rawValue) { [weak self] _ in
                 self?.selectedPaper = value
                 self?.paper.setTitle(value.rawValue, for: .normal)
+                self?.paper.configuration?.title = value.rawValue
                 self?.styleChanged()
             }
         })
-        sizeInfo.font = .systemFont(ofSize: 12)
+        sizeInfo.font = .preferredFont(forTextStyle: .subheadline)
+        sizeInfo.textColor = BoothTheme.secondary
         sizeInfo.numberOfLines = 0
         printSize.selectedSegmentIndex = PhotoPrintSize.allCases.firstIndex(of: .six)!
-        sizeInfo.text = "6英寸横向相纸 · 固定输出 1800×1200 JPEG"
+        sizeInfo.text = "6 英寸 · 横向照片"
         timer.selectedSegmentIndex = 1
-        timer.backgroundColor = UIColor(red: 0.93, green: 0.94, blue: 0.97, alpha: 1)
-        timer.setTitleTextAttributes([.foregroundColor: UIColor(white: 0.2, alpha: 1)], for: .normal)
+        timer.accessibilityLabel = "拍摄倒计时"
         strength.value = 1
         strength.isContinuous = true
         strength.accessibilityLabel = "滤镜强度"
-        for selector in [aspect, filter, frame, direction, placement, rotation] {
+        for selector in [filter, frame, direction, placement, rotation] {
             selector.addAction(UIAction { [weak self] _ in self?.styleChanged() }, for: .valueChanged)
         }
         printSize.addAction(UIAction { [weak self] _ in
@@ -280,6 +308,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
             self.selectedPaper = choice.defaultPaper
             #endif
             self.paper.setTitle(self.selectedPaper.rawValue, for: .normal)
+            self.paper.configuration?.title = self.selectedPaper.rawValue
             self.styleChanged()
         }, for: .valueChanged)
         strength.addAction(UIAction { [weak self] _ in self?.styleChanged() }, for: .valueChanged)
@@ -292,34 +321,31 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         configure(cameraButton, "选择相机") { [weak self] in self?.camera.refreshCameras() }
         cameraButton.showsMenuAsPrimaryAction = true
         let refresh = UIButton(type: .system)
-        configure(refresh, "刷新设备") { [weak self] in self?.camera.refreshCameras() }
-        configure(recoverCameraPhoto, "读取相机最近照片") { [weak self] in self?.recoverLatestCameraPhoto() }
+        configure(refresh, "重新查找相机") { [weak self] in self?.camera.refreshCameras() }
+        refresh.configuration?.image = UIImage(systemName: "arrow.clockwise")
+        configure(recoverCameraPhoto, "取回最近一张") { [weak self] in self?.recoverLatestCameraPhoto() }
         recoverCameraPhoto.configuration?.image = UIImage(systemName: "arrow.down.circle")
         recoverCameraPhoto.configuration?.imagePadding = 7
-        configure(shutter, "开始拍照") { [weak self] in self?.capture() }
-        shutter.tag = 1
-        shutter.configuration?.baseBackgroundColor = accent
-        shutter.configuration?.baseForegroundColor = .white
-        shutter.configuration?.background.backgroundColor = accent
-        shutter.configuration?.image = UIImage(systemName: "camera.aperture")
-        shutter.configuration?.imagePadding = 10
-        configure(retake, "重新拍摄") { [weak self] in
+        configure(shutter, "拍照") { [weak self] in self?.capture() }
+        BoothTheme.styleButton(shutter, title: "拍照", symbol: "camera", role: .primary)
+        configure(retake, "重拍") { [weak self] in
             self?.pendingAutoSave = false
             self?.hideCaptureLoading()
             self?.camera.clearCapture()
         }
-        configure(printButton, "打印这张照片") { [weak self] in
+        configure(printButton, "去米家打印") { [weak self] in
             self?.startPhotoPrint()
         }
-        printButton.configuration?.image = UIImage(systemName: "printer")
-        printButton.configuration?.imagePadding = 8
-        saveStatus.font = .systemFont(ofSize: 12)
-        saveStatus.textColor = .secondaryLabel
+        BoothTheme.styleButton(printButton, title: "去米家打印", symbol: "printer", role: .primary)
+        saveStatus.font = .preferredFont(forTextStyle: .subheadline)
+        saveStatus.textColor = BoothTheme.secondary
         saveStatus.numberOfLines = 0
+        configure(saveCurrent, "保存当前成片") { [weak self] in self?.savePhoto() }
+        saveCurrent.configuration?.image = UIImage(systemName: "square.and.arrow.down")
         #if targetEnvironment(macCatalyst)
-        saveStatus.text = "拍摄后自动保存到“图片/SnapBooth” · 包含滤镜与排版"
+        saveStatus.text = "拍摄后自动保存到“图片 / SnapBooth”。"
         #else
-        saveStatus.text = "拍摄后自动保存到照片图库 · 包含滤镜与排版"
+        saveStatus.text = "拍摄后自动保存到系统相册。"
         #endif
         let choose = printerChoice
         #if targetEnvironment(macCatalyst)
@@ -327,44 +353,63 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         #else
         configure(choose, "选择 AirPrint 打印机") { [weak self] in self?.printer.choosePrinter() }
         #endif
-        let export = UIButton(type: .system)
-        configure(export, "导出最近的打印图片") { [weak self, weak export] in
+        let export = exportButton
+        configure(export, "分享最近保存的照片") { [weak self, weak export] in
             guard let self, let url = self.printer.lastMockPrintURL else { return }
             let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
             sheet.popoverPresentationController?.sourceView = export
             self.present(sheet, animated: true)
         }
-        let subtitle = label("YOUR MOMENT, YOUR WAY", size: 10, weight: .semibold)
+        let subtitle = label("PHOTO STUDIO", size: 11, weight: .semibold)
         subtitle.textColor = accent
-        editorState.text = "实时预览 · 调整即生效"
-        editorState.font = .systemFont(ofSize: 12)
-        editorState.textColor = .secondaryLabel
+        editorState.text = "调整会同步到成片。"
+        editorState.font = .preferredFont(forTextStyle: .subheadline)
+        editorState.textColor = BoothTheme.secondary
         editorState.numberOfLines = 0
-        let intensityTitle = label("滤镜强度", size: 12)
+        let intensityTitle = label("滤镜强度", size: 13)
+        intensityControls.axis = .vertical
+        intensityControls.spacing = 8
+        intensityControls.addArrangedSubview(intensityTitle)
+        intensityControls.addArrangedSubview(strength)
+        intensityControls.isHidden = true
+        configure(filterChoice, "原片") { }
+        filterChoice.showsMenuAsPrimaryAction = true
+        updateFilterMenu()
         let reset = UIButton(type: .system)
-        configure(reset, "恢复原片风格") { [weak self] in
+        configure(reset, "重置照片调整") { [weak self] in
             guard let self else { return }
-            self.aspect.selectedSegmentIndex = 0
             self.filter.selectedSegmentIndex = 0
             self.strength.value = 1
             self.styleChanged()
         }
+        BoothTheme.styleButton(reset, title: "重置照片调整", symbol: "arrow.counterclockwise", role: .quiet)
         paperSettings.axis = .vertical
         paperSettings.spacing = 10
         paperSettings.addArrangedSubview(paper)
-        paperSettings.addArrangedSubview(label("默认自动匹配。仅打印机使用不同规格相纸时修改；3寸默认50×76 mm，小米桌面3寸需选择86×102 mm。", size: 11))
+        paperSettings.addArrangedSubview(label("仅在相纸规格不同时修改。米家打印时，请选择与成片匹配的相纸。", size: 13))
         paperSettings.isHidden = true
         let advanced = UIButton(type: .system)
-        configure(advanced, "打印设置 · 展开") { [weak self, weak advanced] in
+        configure(advanced, "相纸与设备检测") { [weak self, weak advanced] in
             guard let self else { return }
             self.paperSettings.isHidden.toggle()
-            advanced?.setTitle(self.paperSettings.isHidden ? "打印设置 · 展开" : "打印设置 · 收起", for: .normal)
+            advanced?.configuration?.image = UIImage(systemName: self.paperSettings.isHidden ? "chevron.down" : "chevron.up")
         }
+        advanced.configuration?.image = UIImage(systemName: "chevron.down")
+        moreAdjustments.axis = .vertical
+        moreAdjustments.spacing = 12
+        photoSizeViews().forEach { moreAdjustments.addArrangedSubview($0) }
+        moreAdjustments.isHidden = true
+        let more = UIButton(type: .system)
+        configure(more, "尺寸与构图") { [weak self, weak more] in
+            guard let self else { return }
+            self.moreAdjustments.isHidden.toggle()
+            more?.configuration?.image = UIImage(systemName: self.moreAdjustments.isHidden ? "chevron.down" : "chevron.up")
+        }
+        more.configuration?.image = UIImage(systemName: "chevron.down")
         let photoPage = UIStackView(arrangedSubviews: [
             makeCaptureTemplateCard(),
-            card("照片风格", views: [editorState, label("画幅", size: 12), aspect,
-                label("滤镜", size: 12), filter, intensityTitle, strength, reset]),
-            card("尺寸与排版", views: photoSizeViews())
+            card("照片风格", views: [editorState, filterChoice, intensityControls, reset]),
+            card("更多调整", views: [sizeInfo, more, moreAdjustments])
         ])
         photoPage.axis = .vertical
         photoPage.spacing = 16
@@ -373,9 +418,9 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         #else
         let connectionHint = "佳能相机可通过 Type-C 直连或 Wi-Fi 遥控拍摄，也可使用设备摄像头。"
         #endif
-        let devicePage = card("拍摄设备", views: [status, cameraButton,
-            label(connectionHint, size: 12), refresh, recoverCameraPhoto])
-        let outputPage = card("输出设置", views: printViews(saveStatus: saveStatus,
+        let devicePage = card("连接相机", views: [cameraButton, status,
+            label(connectionHint, size: 13), refresh, recoverCameraPhoto])
+        let outputPage = card("打印方式", views: printViews(saveStatus: saveStatus,
             advanced: advanced, choose: choose, export: export))
         inspectorPages = [photoPage, devicePage, outputPage]
         inspectorTabs.selectedSegmentIndex = 0
@@ -383,50 +428,76 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         inspectorTabs.addAction(UIAction { [weak self] _ in self?.selectInspectorPage() }, for: .valueChanged)
         let controls = UIStackView(arrangedSubviews: inspectorPages)
         selectInspectorPage()
-        let identity = UIStackView(arrangedSubviews: [subtitle, title])
+        identity.addArrangedSubview(subtitle)
+        identity.addArrangedSubview(title)
         identity.axis = .vertical
         identity.spacing = 4
         inspector.axis = .vertical
-        inspector.spacing = 18
+        inspector.spacing = 16
         inspector.addArrangedSubview(identity)
         inspector.addArrangedSubview(inspectorTabs)
         inspector.addArrangedSubview(scroll)
-        let delivery = card("照片交付", views: [saveStatus, printButton])
+        deliveryHint.font = .preferredFont(forTextStyle: .subheadline)
+        deliveryHint.textColor = BoothTheme.secondary
+        deliveryHint.numberOfLines = 0
+        let delivery = card("拍摄与保存", views: [saveStatus, saveCurrent, deliveryHint])
+        savePanel = delivery
         inspector.addArrangedSubview(delivery)
-        printButton.tag = 1
-        printButton.configuration?.baseBackgroundColor = accent
-        printButton.configuration?.baseForegroundColor = .white
-        printButton.configuration?.background.backgroundColor = accent
-        [aspect, filter, frame, direction, placement, printSize, rotation, timer, mode, inspectorTabs].forEach {
-            $0.selectedSegmentTintColor = .white
-            $0.setTitleTextAttributes([.font: UIFont.systemFont(ofSize: 12, weight: .medium)], for: .normal)
-            $0.setTitleTextAttributes([.foregroundColor: accent, .font: UIFont.systemFont(ofSize: 12, weight: .semibold)], for: .selected)
+        [filter, frame, direction, placement, printSize, rotation, timer, mode, inspectorTabs].forEach {
+            BoothTheme.styleSegments($0)
         }
         controls.axis = .vertical
         controls.spacing = 16
         scroll.showsVerticalScrollIndicator = false
         scroll.addSubview(controls)
         controls.translatesAutoresizingMaskIntoConstraints = false
-        stage.backgroundColor = UIColor(red: 0.08, green: 0.09, blue: 0.13, alpha: 1)
-        stage.layer.cornerRadius = 28
+        stage.backgroundColor = BoothTheme.stage
+        stage.layer.cornerRadius = 24
         stage.clipsToBounds = true
-        stageLabel.text = "●  拍摄工作台"
+        stageLabel.text = "准备拍摄"
         stageLabel.textColor = .white
-        stageLabel.font = .monospacedSystemFont(ofSize: 12, weight: .semibold)
+        stageLabel.font = .preferredFont(forTextStyle: .headline)
         var homeConfiguration = UIButton.Configuration.plain()
         homeConfiguration.title = "返回首页"
         homeConfiguration.image = UIImage(systemName: "house")
         homeConfiguration.imagePadding = 7
         homeConfiguration.baseForegroundColor = .white
+        homeConfiguration.titleLineBreakMode = .byClipping
         homeButton.configuration = homeConfiguration
+        homeButton.accessibilityLabel = "返回首页"
+        homeButton.setContentCompressionResistancePriority(.required, for: .horizontal)
         homeButton.addAction(UIAction { [weak self] _ in self?.showHomePage() }, for: .touchUpInside)
+        var settingsConfiguration = UIButton.Configuration.plain()
+        settingsConfiguration.title = "收起设置"
+        settingsConfiguration.image = UIImage(systemName: "sidebar.right")
+        settingsConfiguration.imagePadding = 7
+        settingsConfiguration.baseForegroundColor = .white
+        settingsConfiguration.titleLineBreakMode = .byClipping
+        settingsConfiguration.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
+        settingsToggle.configuration = settingsConfiguration
+        settingsToggle.setContentCompressionResistancePriority(.required, for: .horizontal)
+        settingsToggle.accessibilityIdentifier = "workspace-settings-toggle"
+        settingsToggle.accessibilityValue = "已展开"
+        settingsToggle.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.setSettingsExpanded(!self.settingsExpanded)
+        }, for: .touchUpInside)
         let stageHeaderSpacer = UIView()
-        let stageHeader = UIStackView(arrangedSubviews: [stageLabel, stageHeaderSpacer, homeButton])
+        stageHeaderSpacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        stageHeaderSpacer.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+        stageLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let stageHeader = UIStackView(arrangedSubviews: [stageLabel, stageHeaderSpacer, homeButton, settingsToggle])
         stageHeader.axis = .horizontal
         stageHeader.alignment = .center
+        stageHeader.spacing = 8
+        let headerHeight = stageHeader.heightAnchor.constraint(equalToConstant: 44)
+        headerHeight.priority = UILayoutPriority(749)
+        headerHeight.isActive = true
         actionButtons.addArrangedSubview(shutter)
         actionButtons.addArrangedSubview(retake)
+        actionButtons.addArrangedSubview(printButton)
         actionButtons.axis = .horizontal
+        actionButtons.spacing = 12
         actionButtons.distribution = .fillEqually
         shooting.addArrangedSubview(timer)
         shooting.addArrangedSubview(toolbarSpacer)
@@ -434,29 +505,47 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         shooting.axis = .horizontal
         shooting.alignment = .center
         shooting.spacing = 16
-        let timerWidth = timer.widthAnchor.constraint(equalToConstant: 300)
+        let timerWidth = timer.widthAnchor.constraint(equalToConstant: 220)
         timerWidth.priority = .defaultHigh
-        let actionWidth = actionButtons.widthAnchor.constraint(equalToConstant: 180)
+        actionWidth = actionButtons.widthAnchor.constraint(equalToConstant: 180)
         actionWidth.priority = .defaultHigh
         NSLayoutConstraint.activate([timerWidth, actionWidth, shooting.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)])
+        toolbarHeight = shooting.heightAnchor.constraint(equalToConstant: 44)
+        toolbarHeight.priority = UILayoutPriority(749)
+        toolbarHeight.isActive = true
+        let minimumPreview = live.heightAnchor.constraint(greaterThanOrEqualToConstant: 120)
+        minimumPreview.priority = .defaultHigh
+        minimumPreview.isActive = true
         let stageContent = UIStackView(arrangedSubviews: [stageHeader, live, shooting])
         stageContent.axis = .vertical
         stageContent.spacing = 16
         stageContent.translatesAutoresizingMaskIntoConstraints = false
         stage.addSubview(stageContent)
-        previewHint.text = "准备好，留下这一刻\n请在「设备」中选择相机"
+        previewHint.text = "准备好，留下这一刻"
         previewHint.numberOfLines = 0
         previewHint.textAlignment = .center
         previewHint.font = .systemFont(ofSize: 18, weight: .medium)
         previewHint.textColor = UIColor.white.withAlphaComponent(0.65)
         previewHint.isUserInteractionEnabled = false
-        live.addSubview(previewHint)
-        previewHint.translatesAutoresizingMaskIntoConstraints = false
+        let connectCamera = UIButton(type: .system)
+        configure(connectCamera, "连接相机") { [weak self] in
+            self?.setSettingsExpanded(true)
+            self?.inspectorTabs.selectedSegmentIndex = 1
+            self?.selectInspectorPage()
+        }
+        connectCamera.configuration?.image = UIImage(systemName: "camera.badge.ellipsis")
+        previewPrompt.axis = .vertical
+        previewPrompt.alignment = .center
+        previewPrompt.spacing = 20
+        previewPrompt.addArrangedSubview(previewHint)
+        previewPrompt.addArrangedSubview(connectCamera)
+        live.addSubview(previewPrompt)
+        previewPrompt.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            previewHint.centerXAnchor.constraint(equalTo: live.centerXAnchor),
-            previewHint.centerYAnchor.constraint(equalTo: live.centerYAnchor),
-            previewHint.leadingAnchor.constraint(greaterThanOrEqualTo: live.leadingAnchor, constant: 16),
-            previewHint.trailingAnchor.constraint(lessThanOrEqualTo: live.trailingAnchor, constant: -16)
+            previewPrompt.centerXAnchor.constraint(equalTo: live.centerXAnchor),
+            previewPrompt.centerYAnchor.constraint(equalTo: live.centerYAnchor),
+            previewPrompt.leadingAnchor.constraint(greaterThanOrEqualTo: live.leadingAnchor, constant: 16),
+            previewPrompt.trailingAnchor.constraint(lessThanOrEqualTo: live.trailingAnchor, constant: -16)
         ])
         stage.addSubview(countdownLabel)
         countdownLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -466,11 +555,11 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         root.addArrangedSubview(stage)
         root.addArrangedSubview(inspector)
         root.axis = .horizontal
-        root.spacing = 24
+        root.spacing = 20
         view.addSubview(root)
         root.translatesAutoresizingMaskIntoConstraints = false
         panelWidth = inspector.widthAnchor.constraint(equalToConstant: 390)
-        stageHeight = stage.heightAnchor.constraint(equalTo: view.safeAreaLayoutGuide.heightAnchor, multiplier: 0.53)
+        stageHeight = stage.heightAnchor.constraint(equalTo: view.safeAreaLayoutGuide.heightAnchor, multiplier: 0.52)
         panelWidth.isActive = true
         NSLayoutConstraint.activate([
             stageContent.leadingAnchor.constraint(equalTo: stage.leadingAnchor, constant: 24),
@@ -512,6 +601,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
                 UIAction(title: option.name) { [weak self] _ in
                     self?.camera.selectCamera(id: option.id)
                     self?.cameraButton.setTitle(option.name, for: .normal)
+                    self?.cameraButton.configuration?.title = option.name
                 }
             }
             #if !targetEnvironment(macCatalyst)
@@ -526,13 +616,14 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         camera.$selectedCameraID.receive(on: DispatchQueue.main).sink { [weak self] id in
             guard let self else { return }
             self.cameraButton.setTitle(self.camera.cameras.first(where: { $0.id == id })?.name ?? "选择相机", for: .normal)
+            self.cameraButton.configuration?.title = self.camera.cameras.first(where: { $0.id == id })?.name ?? "选择相机"
         }.store(in: &subscriptions)
         camera.$capturedImage.receive(on: DispatchQueue.main).sink { [weak self] image in
             guard let self else { return }
             if image != nil, self.expectingCameraCapture {
                 self.pendingAutoSave = true
                 self.expectingCameraCapture = false
-                self.showCaptureLoading("正在生成照片", detail: "正在应用画幅、滤镜与 6 英寸排版…")
+                self.showCaptureLoading("正在生成照片", detail: "正在应用滤镜与模板…")
             }
             self.renderPhoto()
             self.updateButtons()
@@ -545,13 +636,24 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
             if self?.printer.mode == .mijiaShare && state == .printing {
                 self?.printerStatus.text = "正在分享照片，请在分享面板选择米家"
             } else {
-                self?.printerStatus.text = state == .ready && self?.printer.mode == .mock ? "模拟输出已就绪 · 无需打印机" : state.description
+                self?.printerStatus.text = state == .ready && self?.printer.mode == .mock ? "照片将保存到 App 文件。" : state.description
             }
             self?.updateButtons()
         }.store(in: &subscriptions)
         installWelcomeCover()
-        updateButtons()
+        styleChanged()
     }
+
+    #if DEBUG && !targetEnvironment(macCatalyst) && !targetEnvironment(simulator)
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Device smoke testing opens the same read-only page as the Output button.
+        guard !didShowPrinterUSBDiagnostics,
+              ProcessInfo.processInfo.arguments.contains("--printer-usb-diagnostics") else { return }
+        didShowPrinterUSBDiagnostics = true
+        showPrinterUSBDiagnostics()
+    }
+    #endif
 
     #if DEBUG && targetEnvironment(simulator)
     override func viewDidAppear(_ animated: Bool) {
@@ -660,7 +762,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         welcomeImage.contentMode = .scaleAspectFill
         welcomeImage.accessibilityLabel = "首页活动背景"
 
-        let veil = UIView()
+        let veil = welcomeVeil
         veil.translatesAutoresizingMaskIntoConstraints = false
         veil.backgroundColor = UIColor.black.withAlphaComponent(0.26)
 
@@ -690,7 +792,8 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         configuration.cornerStyle = .capsule
         configuration.contentInsets = NSDirectionalEdgeInsets(top: 17, leading: 42, bottom: 17, trailing: 42)
         welcomeStart.configuration = configuration
-        welcomeStart.titleLabel?.font = .systemFont(ofSize: 19, weight: .bold)
+        BoothTheme.styleButton(welcomeStart, title: homeSettings.buttonTitle, symbol: "arrow.right", role: .primary)
+        welcomeStart.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 18, leading: 36, bottom: 18, trailing: 36)
         welcomeStart.addAction(UIAction { [weak self] _ in self?.showTemplateSelection() }, for: .touchUpInside)
 
         let edit = UIButton(type: .system)
@@ -776,6 +879,14 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         welcomeSubtitle.text = homeSettings.subtitle
         welcomeStart.configuration?.title = homeSettings.buttonTitle
         welcomeImage.image = welcomeBackground
+        let studioWelcome = HomePageBackgroundStore.load() == nil
+        welcomeImage.isHidden = studioWelcome
+        welcomeVeil.isHidden = studioWelcome
+        welcomeCover.backgroundColor = studioWelcome ? BoothTheme.canvas : BoothTheme.stage
+        welcomeHeading.textColor = studioWelcome ? BoothTheme.ink : .white
+        welcomeEyebrow.textColor = studioWelcome ? BoothTheme.accent : .white.withAlphaComponent(0.92)
+        welcomeSubtitle.textColor = studioWelcome ? BoothTheme.secondary : .white.withAlphaComponent(0.9)
+        welcomeMark.textColor = studioWelcome ? BoothTheme.accent : UIColor(red: 1.0, green: 0.86, blue: 0.57, alpha: 1)
     }
 
     private func showHomeEditor() {
@@ -806,7 +917,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
     private func installHomeEditorIfNeeded() {
         guard homeEditor.superview == nil else { return }
         homeEditor.translatesAutoresizingMaskIntoConstraints = false
-        homeEditor.backgroundColor = UIColor(red: 0.96, green: 0.95, blue: 0.92, alpha: 1)
+        homeEditor.backgroundColor = BoothTheme.canvas
 
         let cancel = UIButton(type: .system)
         var cancelConfiguration = UIButton.Configuration.plain()
@@ -815,16 +926,17 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         cancelConfiguration.imagePadding = 7
         cancelConfiguration.baseForegroundColor = UIColor(white: 0.16, alpha: 1)
         cancel.configuration = cancelConfiguration
+        BoothTheme.styleButton(cancel, title: "返回首页", symbol: "chevron.left", role: .quiet)
         cancel.addAction(UIAction { [weak self] _ in self?.closeHomeEditor() }, for: .touchUpInside)
 
         let pageTitle = UILabel()
-        pageTitle.text = "首页编辑"
+        pageTitle.text = "布置活动首页"
         pageTitle.font = .systemFont(ofSize: 24, weight: .bold)
         pageTitle.textColor = UIColor(white: 0.12, alpha: 1)
         pageTitle.textAlignment = .center
         let pageDetail = UILabel()
-        pageDetail.text = "适用于婚礼、生日、年会、品牌活动等不同场景"
-        pageDetail.font = .systemFont(ofSize: 11, weight: .medium)
+        pageDetail.text = "换上背景，写下欢迎语。"
+        pageDetail.font = .systemFont(ofSize: 13, weight: .medium)
         pageDetail.textColor = .secondaryLabel
         pageDetail.textAlignment = .center
         let pageHeading = UIStackView(arrangedSubviews: [pageTitle, pageDetail])
@@ -840,6 +952,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         doneConfiguration.baseForegroundColor = .white
         doneConfiguration.cornerStyle = .capsule
         done.configuration = doneConfiguration
+        BoothTheme.styleButton(done, title: "保存首页", symbol: "checkmark", role: .primary)
         done.addAction(UIAction { [weak self] _ in self?.saveHomeEditor() }, for: .touchUpInside)
 
         let topSpacer = UIView()
@@ -857,7 +970,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         homeEditorPreviewImage.translatesAutoresizingMaskIntoConstraints = false
         homeEditorPreviewImage.contentMode = .scaleAspectFill
         homeEditorPreviewImage.accessibilityLabel = "首页实时预览"
-        let previewVeil = UIView()
+        let previewVeil = homeEditorVeil
         previewVeil.translatesAutoresizingMaskIntoConstraints = false
         previewVeil.backgroundColor = UIColor.black.withAlphaComponent(0.30)
 
@@ -878,7 +991,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         homeEditorStart.font = .systemFont(ofSize: 14, weight: .bold)
         homeEditorStart.textColor = .white
         homeEditorStart.textAlignment = .center
-        homeEditorStart.backgroundColor = UIColor(red: 0.68, green: 0.04, blue: 0.06, alpha: 0.96)
+        homeEditorStart.backgroundColor = accent
         homeEditorStart.layer.cornerRadius = 20
         homeEditorStart.clipsToBounds = true
         let previewCopy = UIStackView(arrangedSubviews: [homeEditorMark, homeEditorEyebrow, homeEditorHeading, homeEditorSubtitle, homeEditorStart])
@@ -893,6 +1006,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         previewPanel.addSubview(previewCopy)
 
         homePreset.selectedSegmentIndex = 0
+        BoothTheme.styleSegments(homePreset)
         homePreset.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             self.applyHomePreset(self.homePreset.selectedSegmentIndex)
@@ -905,13 +1019,13 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         chooseBackground.configuration?.titleLineBreakMode = .byClipping
         chooseBackground.accessibilityLabel = "选择背景图片"
         let defaultBackground = UIButton(type: .system)
-        configure(defaultBackground, "默认背景") { [weak self] in
+        configure(defaultBackground, "简洁背景") { [weak self] in
             self?.draftWelcomeBackground = UIImage(named: "wedding-welcome-cover")
             self?.draftUsesCustomBackground = false
             self?.updateHomeEditorPreview()
         }
         defaultBackground.configuration?.titleLineBreakMode = .byClipping
-        defaultBackground.accessibilityLabel = "恢复默认背景"
+        defaultBackground.accessibilityLabel = "使用简洁暖白背景"
         let backgroundButtons = UIStackView(arrangedSubviews: [chooseBackground, defaultBackground])
         backgroundButtons.axis = .horizontal
         backgroundButtons.distribution = .fillEqually
@@ -999,6 +1113,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         field.borderStyle = .roundedRect
         field.clearButtonMode = .whileEditing
         field.font = .systemFont(ofSize: 15)
+        field.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         field.addAction(UIAction { [weak self] _ in self?.updateHomeEditorPreview() }, for: .editingChanged)
         let heading = label(title, size: 12, weight: .semibold)
         let stack = UIStackView(arrangedSubviews: [heading, field])
@@ -1046,6 +1161,14 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         homeEditorHeading.text = homeTitleField.text
         homeEditorSubtitle.text = homeSubtitleField.text
         homeEditorStart.text = homeButtonField.text
+        let studioWelcome = !draftUsesCustomBackground
+        homeEditorPreviewImage.isHidden = studioWelcome
+        homeEditorVeil.isHidden = studioWelcome
+        homeEditorPreviewImage.superview?.backgroundColor = studioWelcome ? BoothTheme.canvas : BoothTheme.stage
+        homeEditorHeading.textColor = studioWelcome ? BoothTheme.ink : .white
+        homeEditorEyebrow.textColor = studioWelcome ? BoothTheme.accent : .white.withAlphaComponent(0.92)
+        homeEditorSubtitle.textColor = studioWelcome ? BoothTheme.secondary : .white.withAlphaComponent(0.9)
+        homeEditorMark.textColor = studioWelcome ? BoothTheme.accent : UIColor(red: 1, green: 0.86, blue: 0.57, alpha: 1)
     }
 
     private func chooseHomeBackground() {
@@ -1083,13 +1206,13 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
               printer.state != .printing,
               PrintLayoutRenderer.standardCells(style: style)?.isEmpty != true else { return }
         // The displayed composition is the output for every destination, including Mijia.
-        if printer.mode == .mijiaShare {
+        if printer.mode == .mijiaShare || printer.mode == .mock {
             printer.print(image: image, presenting: self, sourceView: printButton)
             return
         }
-        let confirmation = UIAlertController(title: "打印当前成片", message: "将使用拍摄时选好的边框与模板。请确认相纸和打印机已准备好。", preferredStyle: .alert)
+        let confirmation = UIAlertController(title: "打印这张照片？", message: "请确认相纸、色带和打印机已准备好。成片包含当前模板和文字。", preferredStyle: .alert)
         confirmation.addAction(UIAlertAction(title: "取消", style: .cancel))
-        confirmation.addAction(UIAlertAction(title: printer.mode == .mock ? "生成模拟输出" : "确认打印", style: .default) { [weak self] _ in
+        confirmation.addAction(UIAlertAction(title: "确认打印", style: .default) { [weak self] _ in
             guard let self else { return }
             self.printer.print(image: image, presenting: self, sourceView: self.printButton)
         })
@@ -1115,6 +1238,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
             self.style = selected
             self.selectedPaper = selected.paper
             self.paper.setTitle(selected.paper.rawValue, for: .normal)
+            self.paper.configuration?.title = selected.paper.rawValue
             self.frame.selectedSegmentIndex = PhotoFrame.allCases.firstIndex(of: selected.frame) ?? 0
             self.direction.selectedSegmentIndex = PaperDirection.allCases.firstIndex(of: selected.direction) ?? 0
             self.placement.selectedSegmentIndex = PhotoPlacement.allCases.firstIndex(of: selected.placement) ?? 0
@@ -1152,25 +1276,20 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
     }
 
     private func configure(_ button: UIButton, _ title: String, action: @escaping () -> Void) {
-        var configuration = UIButton.Configuration.filled()
-        configuration.baseBackgroundColor = UIColor(red: 0.93, green: 0.94, blue: 0.97, alpha: 1)
-        configuration.baseForegroundColor = UIColor(white: 0.18, alpha: 1)
-        configuration.cornerStyle = .large
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)
-        button.configuration = configuration
-        button.configurationUpdateHandler = { button in
-            guard var config = button.configuration else { return }
-            if !button.isEnabled {
-                config.background.backgroundColor = UIColor(white: 0.82, alpha: 1)
-                config.baseForegroundColor = UIColor(white: 0.4, alpha: 1)
-            } else {
-                config.background.backgroundColor = config.baseBackgroundColor
-                config.baseForegroundColor = button.tag == 1 ? .white : UIColor(white: 0.18, alpha: 1)
-            }
-            button.configuration = config
-        }
-        button.setTitle(title, for: .normal)
+        BoothTheme.styleButton(button, title: title)
         button.addAction(UIAction { _ in action() }, for: .touchUpInside)
+    }
+
+    private func updateFilterMenu() {
+        filterChoice.configuration?.title = "滤镜 · \(PhotoFilter.allCases[filter.selectedSegmentIndex].rawValue)"
+        filterChoice.configuration?.image = UIImage(systemName: "camera.filters")
+        filterChoice.menu = UIMenu(children: PhotoFilter.allCases.enumerated().map { index, value in
+            UIAction(title: value.rawValue, state: filter.selectedSegmentIndex == index ? .on : .off) { [weak self] _ in
+                self?.filter.selectedSegmentIndex = index
+                self?.styleChanged()
+            }
+        })
+        intensityControls.isHidden = filter.selectedSegmentIndex == 0
     }
     private func printViews(
         saveStatus: UILabel,
@@ -1178,26 +1297,42 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         choose: UIButton,
         export: UIButton
     ) -> [UIView] {
+        for hint in [printingHelp, printingDetail] {
+            hint.font = .preferredFont(forTextStyle: .subheadline)
+            hint.textColor = BoothTheme.secondary
+            hint.numberOfLines = 0
+        }
         #if targetEnvironment(macCatalyst)
-        return [
-            label("米家 USB 固定输出 6 英寸、300 DPI；请装入 6 英寸相纸及配套色带。", size: 11),
-            mode,
-            choose,
-            printerStatus,
-            export
-        ]
+        return [mode, printerStatus, printingHelp, printingDetail, choose, export]
         #else
+        let diagnostics = UIButton(type: .system)
+        configure(diagnostics, "USB 设备检测") { [weak self] in
+            self?.showPrinterUSBDiagnostics()
+        }
+        diagnostics.accessibilityIdentifier = "printer-usb-diagnostics"
+        paperSettings.addArrangedSubview(diagnostics)
+        paperSettings.addArrangedSubview(label("设备检测仅用于排查连接，不提供 USB 打印。", size: 13))
         return [
+            mode,
+            printerStatus,
+            printingHelp,
+            printingDetail,
+            choose,
             advanced,
             paperSettings,
-            label("米家 App：分享的成片已包含边框与模板。在米家中选择匹配的相纸并保留完整图片，避免再次添加边框或裁切。", size: 11),
-            mode,
-            choose,
-            printerStatus,
             export
         ]
         #endif
     }
+
+    #if !targetEnvironment(macCatalyst)
+    private func showPrinterUSBDiagnostics() {
+        guard presentedViewController == nil else { return }
+        let navigation = UINavigationController(rootViewController: PrinterUSBDiagnosticsController())
+        navigation.modalPresentationStyle = .formSheet
+        present(navigation, animated: true)
+    }
+    #endif
     private func selectInspectorPage() {
         for (index, page) in inspectorPages.enumerated() {
             page.isHidden = index != inspectorTabs.selectedSegmentIndex
@@ -1208,22 +1343,23 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
     private func photoSizeViews() -> [UIView] {
         #if targetEnvironment(macCatalyst)
         return [
-            sizeInfo,
             label("照片旋转", size: 12),
             rotation,
             placement,
-            label("米家 USB 固定使用 6 英寸相纸（100×180 mm，成像区 100×148 mm）。", size: 11)
+            label("完整画面会保留照片四边，比例不同时留白。", size: 13),
+            label("USB 打印使用 6 英寸横向相纸。", size: 13)
         ]
         #else
+        flexibleFormat.axis = .vertical
+        flexibleFormat.spacing = 12
+        [label("照片尺寸", size: 13), printSize, label("横竖方向", size: 13), direction,
+         label("照片排版", size: 13), layout].forEach { flexibleFormat.addArrangedSubview($0) }
         return [
-            printSize,
-            sizeInfo,
-            label("横竖方向", size: 12),
-            direction,
             label("照片旋转", size: 12),
             rotation,
             placement,
-            layout,
+            label("完整画面会保留照片四边，比例不同时留白。", size: 13),
+            flexibleFormat,
             label("1寸、2寸自动拼版并标出裁切边界；普通照片自动匹配相纸。", size: 11)
         ]
         #endif
@@ -1239,8 +1375,8 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
                 liveDecoration.isHidden = true
             }
             rendering = false
-            stageLabel.text = "●  拍摄工作台"
-            editorState.text = "实时预览 · 设置会保留到下一张"
+            stageLabel.text = "准备拍摄"
+            editorState.text = "调整会同步到成片。"
             updateButtons()
             if let frame = camera.latestFrame { renderLive(frame) }
             return
@@ -1259,11 +1395,14 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
                 self.photo.isHidden = false
                 self.liveDecoration.isHidden = true
                 self.rendering = false
-                self.stageLabel.text = "○  成片预览"
-                self.editorState.text = "\(settings.aspect.rawValue) · \(settings.filter.rawValue) · \(settings.frame.rawValue) · \(settings.weddingTemplate.rawValue)"
+                self.stageLabel.text = "成片预览"
+                self.editorState.text = "不满意可以继续调整，或重拍一张。"
+                if !self.pendingAutoSave && !self.saving && self.savedRevision != revision {
+                    self.saveStatus.text = "当前调整尚未保存。"
+                }
                 self.updateButtons()
                 self.hideCaptureLoading()
-                if self.pendingAutoSave {
+                if self.pendingAutoSave && !self.saving {
                     self.pendingAutoSave = false
                     self.savePhoto()
                 }
@@ -1271,9 +1410,32 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         }
     }
     private func updateButtons() {
-        previewHint.isHidden = camera.state.isReady || camera.capturedImage != nil || busy
-        printButton.setTitle(printer.mode == .mijiaShare ? "用米家打印" : "打印这张照片", for: .normal)
-        printButton.configuration?.title = printer.mode == .mijiaShare ? "用米家打印" : "打印这张照片"
+        previewPrompt.isHidden = camera.state.isReady || camera.capturedImage != nil || busy
+        let printTitle = printer.mode == .mijiaShare ? "去米家打印" : (printer.mode == .mock ? "存到文件" : "打印照片")
+        printButton.configuration?.title = printTitle
+        printButton.configuration?.image = UIImage(systemName: printer.mode == .mock ? "square.and.arrow.down" : "printer")
+        printButton.isHidden = camera.capturedImage == nil
+        actionWidth?.constant = camera.capturedImage == nil ? 180 : 320
+        timer.isHidden = camera.capturedImage != nil
+        exportButton.isHidden = printer.mode != .mock || printer.lastMockPrintURL == nil
+        savePanel?.isHidden = view.bounds.width < 850 && camera.capturedImage == nil
+        saveCurrent.isHidden = camera.capturedImage == nil || pendingAutoSave || saving || rendering || savedRevision == renderRevision
+        saveCurrent.isEnabled = !saving && !rendering && printable != nil && PrintLayoutRenderer.standardCells(style: style)?.isEmpty != true
+        deliveryHint.text = camera.capturedImage == nil ? "选好模板和倒计时，轻点拍照。" : (printer.mode == .mijiaShare ? "确认成片后，去米家完成打印。" : "确认成片后，点击下方按钮继续。")
+        switch printer.mode {
+        case .mijiaShare:
+            printingHelp.text = "拍摄后点「去米家打印」，在分享面板选择米家，再确认打印。"
+            printingDetail.text = "成片已包含模板和文字。在米家中保留完整图片即可。"
+        case .mock:
+            printingHelp.text = "将成片另存一份到 App 文件，也可以继续分享。"
+            printingDetail.text = "此方式不会发送打印任务。"
+        case .airPrint:
+            printingHelp.text = "选择支持 AirPrint 的打印机，在系统面板中确认打印。"
+            printingDetail.text = "小米照片打印机请使用「米家打印」。"
+        case .xiaomiUSB:
+            printingHelp.text = "装入 6 英寸相纸和配套色带，确认成片后再打印。"
+            printingDetail.text = "打印期间请保持 USB 连接。"
+        }
         mode.isEnabled = printer.state != .printing
         #if targetEnvironment(macCatalyst)
         printerChoice.isHidden = printer.mode != .xiaomiUSB
@@ -1283,7 +1445,8 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         shutter.isEnabled = camera.state.isReady && !busy && camera.capturedImage == nil
         shutter.isHidden = camera.capturedImage != nil
         retake.isHidden = camera.capturedImage == nil
-        retake.isEnabled = camera.capturedImage != nil && !busy
+        retake.isEnabled = camera.capturedImage != nil && !busy && printer.state != .printing
+        homeButton.isEnabled = !busy && printer.state != .printing
         printButton.isEnabled = printer.state != .printing && printable != nil && !rendering && PrintLayoutRenderer.standardCells(style: style)?.isEmpty != true
         cameraButton.isEnabled = !busy
         recoverCameraPhoto.isEnabled = !busy && (
@@ -1313,7 +1476,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
                     self.decorationCanvas = result.size
                 }
                 self.liveDecoration.isHidden = false
-                self.editorState.text = "实时预览 · \(settings.filter.rawValue) · \(settings.weddingTemplate.rawValue)"
+                self.editorState.text = "实时预览 · \(settings.filter.rawValue)"
             }
         }
     }
@@ -1321,6 +1484,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         guard let image = printable, !rendering, !saving,
               PrintLayoutRenderer.standardCells(style: style)?.isEmpty != true else { return }
         saving = true
+        savingRevision = renderRevision
         saveStatus.text = "正在准备照片…"
         updateButtons()
         // Snapshot the finished image; later edits cannot change this save operation.
@@ -1349,7 +1513,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
                 let url = folder.appendingPathComponent(filename)
                 try jpeg.write(to: url, options: .atomic)
                 DispatchQueue.main.async {
-                    self?.finishSave("已自动保存：图片/SnapBooth/\(filename)")
+                    self?.finishSave("已保存到“图片 / SnapBooth”。", saved: true)
                 }
             } catch {
                 DispatchQueue.main.async { self?.finishSave("自动保存失败：\(error.localizedDescription)") }
@@ -1365,16 +1529,22 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
                     request.addResource(with: .photo, data: jpeg, options: nil)
                 } completionHandler: { success, error in
                     DispatchQueue.main.async {
-                        self?.finishSave(success ? "已保存到照片图库" : "保存失败：\(error?.localizedDescription ?? "请重试")")
+                        self?.finishSave(success ? "已保存到系统相册。" : "保存失败：\(error?.localizedDescription ?? "请重试")", saved: success)
                     }
                 }
             }
             #endif
         }
     }
-    private func finishSave(_ message: String) {
+    private func finishSave(_ message: String, saved: Bool = false) {
         saving = false
-        saveStatus.text = message
+        if saved { savedRevision = savingRevision }
+        saveStatus.text = saved && camera.capturedImage != nil && savedRevision != renderRevision
+            ? "已保存上一版，当前调整尚未保存。" : message
+        if pendingAutoSave && !rendering && camera.capturedImage != nil {
+            pendingAutoSave = false
+            savePhoto()
+        }
         updateButtons()
     }
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
@@ -1429,7 +1599,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
             self.showCaptureLoading("正在拍摄并读取照片", detail: "请稍候，正在从相机下载高画质照片…")
             self.camera.capture { [weak self] result in
                 self?.busy = false
-                self?.shutter.setTitle("开始拍照", for: .normal)
+                self?.shutter.configuration?.title = "拍照"
                 if case .failure(let error) = result {
                     self?.expectingCameraCapture = false
                     self?.status.text = error.localizedDescription
@@ -1497,19 +1667,52 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
     }
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        updateWorkspaceLayout()
         let narrowToolbar = stage.bounds.width < 540
+        let homeTitle = narrowToolbar ? nil : "返回首页"
+        if homeButton.configuration?.title != homeTitle {
+            homeButton.configuration?.title = homeTitle
+        }
         shooting.axis = narrowToolbar ? .vertical : .horizontal
+        toolbarHeight.constant = narrowToolbar && !timer.isHidden ? 104 : 44
         toolbarSpacer.isHidden = narrowToolbar
+    }
+
+    private func setSettingsExpanded(_ expanded: Bool) {
+        guard settingsExpanded != expanded else { return }
+        settingsExpanded = expanded
+        settingsToggle.configuration?.title = expanded ? "收起设置" : "展开设置"
+        settingsToggle.configuration?.image = UIImage(systemName: expanded ? "sidebar.right" : "slider.horizontal.3")
+        settingsToggle.accessibilityValue = expanded ? "已展开" : "已收起"
+        updateWorkspaceLayout()
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+    }
+
+    private func updateWorkspaceLayout() {
         let compact = view.bounds.width < 850
+        identity.isHidden = compact
+        savePanel.isHidden = compact && camera.capturedImage == nil
+        if !settingsExpanded, inspector.superview != nil {
+            panelWidth.isActive = false
+            stageHeight.isActive = false
+            // Removing the settings stack avoids zero-width hiding constraints
+            // on its nested cards. The stack and all selected values stay alive.
+            root.removeArrangedSubview(inspector)
+            inspector.removeFromSuperview()
+        } else if settingsExpanded, inspector.superview == nil {
+            root.addArrangedSubview(inspector)
+        }
         if (root.axis == .vertical) != compact {
             panelWidth.isActive = false
             stageHeight.isActive = false
             root.axis = compact ? .vertical : .horizontal
-            if compact { stageHeight.isActive = true } else { panelWidth.isActive = true }
         }
+        panelWidth.isActive = settingsExpanded && !compact
+        stageHeight.isActive = settingsExpanded && compact
     }
     private func styleChanged() {
-        style.aspect = PhotoAspect.allCases[aspect.selectedSegmentIndex]
+        updateFilterMenu()
         style.filter = PhotoFilter.allCases[filter.selectedSegmentIndex]
         style.frame = PhotoFrame.allCases[frame.selectedSegmentIndex]
         style.intensity = strength.value
@@ -1534,21 +1737,24 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         }
         direction.isEnabled = !illustrated
         printSize.isEnabled = !illustrated
+        direction.isHidden = illustrated
+        printSize.isHidden = illustrated
+        layout.isHidden = illustrated
+        flexibleFormat.isHidden = illustrated
         let fixed = style.printSize.isID
-        aspect.isEnabled = !fixed
         layout.isEnabled = !fixed && !illustrated
         placement.isEnabled = !fixed
 
         #if targetEnvironment(macCatalyst)
-        sizeInfo.text = "6英寸横向相纸 · 1800×1200 JPEG"
-        sizeInfo.textColor = .secondaryLabel
+        sizeInfo.text = "6 英寸 · 横向照片"
+        sizeInfo.textColor = BoothTheme.secondary
         #else
         if let cells = PrintLayoutRenderer.standardCells(style: style) {
             sizeInfo.text = cells.isEmpty ? "所选相纸放不下这张标准照片，请换大相纸或旋转照片。不会自动缩小，已禁用打印。" : "\(style.printSize.detail) · 每纸 \(cells.count) 张 · 2 mm 间距"
             sizeInfo.textColor = cells.isEmpty ? .systemRed : .secondaryLabel
         } else {
-            sizeInfo.text = "\(style.printSize.rawValue)照片 · \(selectedPaper.rawValue)"
-            sizeInfo.textColor = .secondaryLabel
+            sizeInfo.text = illustrated ? "此模板使用 6 英寸横向相纸。" : "\(style.printSize.rawValue)照片 · \(selectedPaper.rawValue)"
+            sizeInfo.textColor = BoothTheme.secondary
         }
         #endif
         renderPhoto()
@@ -1556,8 +1762,9 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
     private func label(_ text: String, size: CGFloat, weight: UIFont.Weight = .regular) -> UILabel {
         let label = UILabel()
         label.text = text
-        label.font = .systemFont(ofSize: size, weight: weight)
-        label.textColor = .secondaryLabel
+        label.font = UIFontMetrics(forTextStyle: .subheadline).scaledFont(for: .systemFont(ofSize: max(size, 13), weight: weight))
+        label.adjustsFontForContentSizeCategory = true
+        label.textColor = BoothTheme.secondary
         label.numberOfLines = 0
         return label
     }
@@ -1569,16 +1776,7 @@ final class MacBoothController: UIViewController, UIDocumentPickerDelegate {
         return row
     }
     private func card(_ title: String, views: [UIView]) -> UIView {
-        let stack = UIStackView(arrangedSubviews: [label(title, size: 13, weight: .bold)] + views)
-        stack.axis = .vertical
-        stack.spacing = 12
-        stack.isLayoutMarginsRelativeArrangement = true
-        stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 20, leading: 18, bottom: 20, trailing: 18)
-        stack.backgroundColor = .white
-        stack.layer.cornerRadius = 18
-        stack.layer.borderWidth = 1
-        stack.layer.borderColor = UIColor(white: 0.90, alpha: 0.7).cgColor
-        return stack
+        BoothTheme.makeSection(title: title, views: views)
     }
 }
 
@@ -1709,7 +1907,7 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
     private let selectionDetail = UILabel()
     private let bodyStack = UIStackView()
     private let choicesScroll = UIScrollView()
-    private let border = UISegmentedControl(items: ["无边", "白色", "奶油", "樱粉", "香槟", "酒红", "鼠尾草", "黑色"])
+    private let border = UIButton(type: .system)
     private let borderSection = UIStackView()
     private var buttons: [UIButton] = []
     private var choicesWidth: NSLayoutConstraint!
@@ -1720,14 +1918,14 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
     private var templateControls: UIStackView!
     private let captionPicker = UIButton(type: .system)
     private let captionText = UITextView()
-    private let captionFont = UISegmentedControl(items: CaptionFont.allCases.map(\.rawValue))
-    private let captionColor = UISegmentedControl(items: CaptionColor.allCases.map(\.rawValue))
+    private let captionFont = UIButton(type: .system)
+    private let captionColor = UIButton(type: .system)
     private let captionSize = UISlider()
     private let captionWidth = UISlider()
     private let captionFields = UIStackView()
     private var captionLabels: [UILabel] = []
     private var selectedCaption: Int?
-    private let accent = UIColor(red: 0.28, green: 0.32, blue: 0.88, alpha: 1)
+    private let accent = BoothTheme.accent
 
     init(style: PhotoStyle) {
         draft = style
@@ -1736,7 +1934,7 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
         draft.mijiaPaperMode = .sixInch
         draft.direction = .landscape
         draft.printSize = .six
-        if draft.weddingTemplate.hasPhotoWindow { draft.placement = .fill }
+        draft.placement = .fit
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError("Not used") }
@@ -1744,26 +1942,28 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
     override func viewDidLoad() {
         super.viewDidLoad()
         view.accessibilityViewIsModal = true
-        view.backgroundColor = UIColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1)
+        view.backgroundColor = BoothTheme.canvas
         view.tintColor = accent
         let back = UIButton(type: .system)
-        var backConfig = UIButton.Configuration.plain()
-        backConfig.title = "返回"
-        backConfig.image = UIImage(systemName: "chevron.left")
-        backConfig.imagePadding = 8
-        back.configuration = backConfig
+        BoothTheme.styleButton(back, title: "返回", symbol: "chevron.left", role: .quiet)
         back.addAction(UIAction { [weak self] _ in self?.onBack?() }, for: .touchUpInside)
-        let heading = text("选择拍摄模板", size: 22, weight: .bold)
-        let step = text("01  选模板    /    02  拍摄    /    03  打印", size: 12)
-        step.textColor = .secondaryLabel
-        let header = UIStackView(arrangedSubviews: [back, UIView(), heading, UIView(), step])
+        let heading = text("选择照片风格", size: 26, weight: .semibold)
+        heading.accessibilityTraits.insert(.header)
+        let step = text("01 / 03", size: 13, weight: .medium)
+        step.textColor = BoothTheme.secondary
+        step.accessibilityLabel = "第 1 步，共 3 步：选择模板"
+        step.setContentCompressionResistancePriority(.required, for: .horizontal)
+        back.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let header = UIStackView(arrangedSubviews: [back, heading, UIView(), step])
         header.alignment = .center
         header.spacing = 16
-        header.distribution = .equalSpacing
 
         let previewPanel = UIView()
-        previewPanel.backgroundColor = UIColor(red: 0.91, green: 0.93, blue: 0.95, alpha: 1)
-        previewPanel.layer.cornerRadius = 24
+        previewPanel.backgroundColor = BoothTheme.surface
+        previewPanel.layer.cornerRadius = 20
+        previewPanel.layer.cornerCurve = .continuous
+        previewPanel.layer.borderWidth = 1
+        previewPanel.layer.borderColor = BoothTheme.line.cgColor
         preview.contentMode = .scaleAspectFit
         preview.isUserInteractionEnabled = true
         preview.onLayout = { [weak self] in self?.layoutCaptionLabels() }
@@ -1771,19 +1971,35 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
         preview.accessibilityLabel = "所选模板成片预览"
         preview.translatesAutoresizingMaskIntoConstraints = false
         previewPanel.addSubview(preview)
+        selectionTitle.font = UIFontMetrics(forTextStyle: .headline).scaledFont(for: .systemFont(ofSize: 20, weight: .semibold))
+        selectionTitle.adjustsFontForContentSizeCategory = true
+        selectionTitle.textColor = BoothTheme.ink
+        selectionTitle.numberOfLines = 0
+        selectionDetail.font = .preferredFont(forTextStyle: .subheadline)
+        selectionDetail.adjustsFontForContentSizeCategory = true
+        selectionDetail.textColor = BoothTheme.secondary
+        selectionDetail.numberOfLines = 0
+        let previewInfo = UIStackView(arrangedSubviews: [selectionTitle, selectionDetail])
+        previewInfo.axis = .vertical
+        previewInfo.spacing = 5
+        previewInfo.translatesAutoresizingMaskIntoConstraints = false
+        previewPanel.addSubview(previewInfo)
         NSLayoutConstraint.activate([
-            preview.leadingAnchor.constraint(equalTo: previewPanel.leadingAnchor, constant: 24),
-            preview.trailingAnchor.constraint(equalTo: previewPanel.trailingAnchor, constant: -24),
-            preview.topAnchor.constraint(equalTo: previewPanel.topAnchor, constant: 24),
-            preview.bottomAnchor.constraint(equalTo: previewPanel.bottomAnchor, constant: -24)
+            preview.leadingAnchor.constraint(equalTo: previewPanel.leadingAnchor, constant: 20),
+            preview.trailingAnchor.constraint(equalTo: previewPanel.trailingAnchor, constant: -20),
+            preview.topAnchor.constraint(equalTo: previewPanel.topAnchor, constant: 20),
+            preview.bottomAnchor.constraint(equalTo: previewInfo.topAnchor, constant: -16),
+            previewInfo.leadingAnchor.constraint(equalTo: preview.leadingAnchor),
+            previewInfo.trailingAnchor.constraint(equalTo: preview.trailingAnchor),
+            previewInfo.bottomAnchor.constraint(equalTo: previewPanel.bottomAnchor, constant: -20)
         ])
         let choices = UIStackView()
         choices.axis = .vertical
         templateControls = choices
         choices.spacing = 14
-        choices.addArrangedSubview(text("为这一刻，选一个风格", size: 21, weight: .bold))
-        let intro = text("选择完整模板，拍摄时就能看到效果。", size: 13)
-        intro.textColor = .secondaryLabel
+        choices.addArrangedSubview(text("选择模板", size: 20, weight: .semibold))
+        let intro = text("轻点切换，预览你的成片。", size: 14)
+        intro.textColor = BoothTheme.secondary
         choices.addArrangedSubview(intro)
         placeholder = makePlaceholder()
         for rowIndex in 0..<((WeddingTemplate.curated.count + 1) / 2) {
@@ -1793,16 +2009,13 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
             row.spacing = 12
             for template in WeddingTemplate.curated[(rowIndex * 2)..<min(rowIndex * 2 + 2, WeddingTemplate.curated.count)] {
                 let button = UIButton(type: .system)
-                var configuration = UIButton.Configuration.plain()
-                configuration.title = template.rawValue
+                BoothTheme.styleButton(button, title: template.rawValue)
+                var configuration = button.configuration ?? .plain()
                 configuration.imagePlacement = .top
                 configuration.imagePadding = 10
                 configuration.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 10, bottom: 12, trailing: 10)
-                configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
-                    var result = attributes
-                    result.font = .systemFont(ofSize: 14, weight: .semibold)
-                    return result
-                }
+                configuration.background.cornerRadius = 14
+                configuration.imageColorTransformer = nil
                 var thumbnailStyle = draft
                 thumbnailStyle.weddingTemplate = template
                 let rendered = PrintLayoutRenderer.render(image: placeholder, layout: .full, style: thumbnailStyle, previewScale: 0.25)
@@ -1812,12 +2025,30 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
                     rendered.draw(in: CGRect(x: 0, y: 0, width: 140, height: 94))
                 }.withRenderingMode(.alwaysOriginal)
                 button.configuration = configuration
-                button.layer.cornerRadius = 16
+                button.configurationUpdateHandler = { button in
+                    guard var configuration = button.configuration else { return }
+                    let foreground = button.isSelected ? BoothTheme.accent : BoothTheme.ink
+                    configuration.baseForegroundColor = foreground
+                    configuration.background.backgroundColor = button.isSelected || button.isHighlighted ? BoothTheme.accentSoft : BoothTheme.surface
+                    configuration.background.strokeColor = button.isSelected ? BoothTheme.accent : BoothTheme.line
+                    configuration.background.strokeWidth = button.isSelected ? 2 : 1
+                    let font = UIFontMetrics(forTextStyle: .subheadline).scaledFont(
+                        for: .systemFont(ofSize: 14, weight: .semibold), compatibleWith: button.traitCollection)
+                    configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
+                        var result = attributes
+                        result.font = font
+                        result.foregroundColor = foreground
+                        return result
+                    }
+                    button.configuration = configuration
+                }
+                button.layer.cornerRadius = 14
+                button.layer.cornerCurve = .continuous
                 button.clipsToBounds = true
                 button.accessibilityLabel = "\(template.rawValue)，\(template.detail)"
                 button.addAction(UIAction { [weak self] _ in
                     self?.draft.weddingTemplate = template
-                    if template.hasPhotoWindow { self?.draft.placement = .fill }
+                    self?.draft.placement = .fit
                     self?.refreshPreview()
                 }, for: .touchUpInside)
                 buttons.append(button)
@@ -1826,35 +2057,32 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
             if row.arrangedSubviews.count == 1 { row.addArrangedSubview(UIView()) }
             choices.addArrangedSubview(row)
         }
-        selectionTitle.font = .systemFont(ofSize: 20, weight: .semibold)
-        selectionDetail.font = .systemFont(ofSize: 13)
-        selectionDetail.textColor = .secondaryLabel
-        selectionDetail.numberOfLines = 0
-        choices.addArrangedSubview(selectionTitle)
-        choices.addArrangedSubview(selectionDetail)
         borderSection.axis = .vertical
-        borderSection.spacing = 10
+        borderSection.spacing = 8
         borderSection.addArrangedSubview(text("简约款边框", size: 13, weight: .semibold))
-        border.selectedSegmentIndex = draft.borderInset == 0 ? 0 : (PhotoFrame.allCases.firstIndex(of: draft.frame) ?? 0) + 1
+        BoothTheme.styleButton(border, title: "边框", symbol: "chevron.down")
+        border.configuration?.imagePlacement = .trailing
+        border.showsMenuAsPrimaryAction = true
         border.accessibilityLabel = "简约模板边框颜色"
-        border.setTitleTextAttributes([.font: UIFont.systemFont(ofSize: 11)], for: .normal)
-        border.addAction(UIAction { [weak self] _ in
-            guard let self else { return }
-            let index = self.border.selectedSegmentIndex
-            self.draft.frame = PhotoFrame.allCases[max(0, index - 1)]
-            self.draft.borderInset = index == 0 ? 0 : 54
-            self.draft.placement = index == 0 ? .fill : .fit
-            self.refreshPreview()
-        }, for: .valueChanged)
         borderSection.addArrangedSubview(border)
         choices.addArrangedSubview(borderSection)
         installCaptionControls()
+        BoothTheme.styleSegments(editTabs)
         editTabs.selectedSegmentIndex = 0
         editTabs.addAction(UIAction { [weak self] _ in self?.updateEditorTab() }, for: .valueChanged)
         let panel = UIStackView(arrangedSubviews: [editTabs, choices, captionControls])
         panel.axis = .vertical
-        panel.spacing = 18
+        panel.spacing = 24
+        panel.isLayoutMarginsRelativeArrangement = true
+        panel.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 20, leading: 20, bottom: 20, trailing: 20)
+        panel.backgroundColor = BoothTheme.surface
+        panel.layer.cornerRadius = 20
+        panel.layer.cornerCurve = .continuous
+        panel.layer.borderWidth = 1
+        panel.layer.borderColor = BoothTheme.line.cgColor
         panel.translatesAutoresizingMaskIntoConstraints = false
+        choicesScroll.keyboardDismissMode = .interactive
+        choicesScroll.showsVerticalScrollIndicator = false
         choicesScroll.addSubview(panel)
         NSLayoutConstraint.activate([
             panel.leadingAnchor.constraint(equalTo: choicesScroll.contentLayoutGuide.leadingAnchor),
@@ -1868,26 +2096,21 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
         bodyStack.spacing = 28
         bodyStack.addArrangedSubview(previewPanel)
         bodyStack.addArrangedSubview(choicesScroll)
-        choicesWidth = choicesScroll.widthAnchor.constraint(equalToConstant: 380)
+        choicesWidth = choicesScroll.widthAnchor.constraint(equalToConstant: 400)
         choicesWidth.isActive = true
         compactPreviewHeight = previewPanel.heightAnchor.constraint(equalTo: view.safeAreaLayoutGuide.heightAnchor, multiplier: 0.34)
+        compactPreviewHeight.priority = .defaultHigh
 
         let continueButton = UIButton(type: .system)
-        var config = UIButton.Configuration.filled()
-        config.title = "使用模板，开始拍摄"
-        config.image = UIImage(systemName: "arrow.right")
-        config.imagePlacement = .trailing
-        config.imagePadding = 10
-        config.baseBackgroundColor = accent
-        config.cornerStyle = .capsule
-        config.contentInsets = NSDirectionalEdgeInsets(top: 16, leading: 26, bottom: 16, trailing: 26)
-        continueButton.configuration = config
+        BoothTheme.styleButton(continueButton, title: "开始拍摄", symbol: "arrow.right", role: .primary)
+        continueButton.configuration?.imagePlacement = .trailing
+        continueButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 16, leading: 26, bottom: 16, trailing: 26)
         continueButton.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             self.onContinue?(self.draft)
         }, for: .touchUpInside)
-        let note = text("6 英寸横向 · 单张照片\n拍摄前可随时更换模板", size: 12)
-        note.textColor = .secondaryLabel
+        let note = text("6 英寸横向 · 单张照片", size: 13)
+        note.textColor = BoothTheme.secondary
         let footer = UIStackView(arrangedSubviews: [note, UIView(), continueButton])
         footer.alignment = .center
         footer.spacing = 16
@@ -1899,14 +2122,14 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
             header.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 28),
             header.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -28),
             header.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 18),
-            header.heightAnchor.constraint(equalToConstant: 48),
+            header.heightAnchor.constraint(greaterThanOrEqualToConstant: 48),
             bodyStack.leadingAnchor.constraint(equalTo: header.leadingAnchor),
             bodyStack.trailingAnchor.constraint(equalTo: header.trailingAnchor),
             bodyStack.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 24),
             bodyStack.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -24),
             footer.leadingAnchor.constraint(equalTo: header.leadingAnchor),
             footer.trailingAnchor.constraint(equalTo: header.trailingAnchor),
-            footer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
+            footer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -20),
             footer.heightAnchor.constraint(greaterThanOrEqualToConstant: 54)
         ])
         refreshPreview()
@@ -1933,17 +2156,40 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
         selectionTitle.text = draft.weddingTemplate.rawValue
         selectionDetail.text = draft.weddingTemplate.detail
         borderSection.isHidden = draft.weddingTemplate.hasPhotoWindow
+        refreshBorderMenu()
         for (index, button) in buttons.enumerated() {
             let selected = WeddingTemplate.curated[index] == draft.weddingTemplate
-            button.layer.borderWidth = selected ? 2 : 1
-            button.layer.borderColor = selected ? accent.cgColor : UIColor(white: 0.87, alpha: 1).cgColor
-            button.backgroundColor = selected ? accent.withAlphaComponent(0.06) : .white
-            button.configuration?.baseForegroundColor = selected ? accent : .label
+            button.isSelected = selected
+            button.setNeedsUpdateConfiguration()
             button.accessibilityTraits = selected ? [.button, .selected] : [.button]
         }
     }
 
+    private func refreshBorderMenu() {
+        let borderless = draft.borderInset == 0
+        let current = borderless ? "无边框" : draft.frame.rawValue
+        border.configuration?.title = current
+        border.accessibilityValue = current
+        let none = UIAction(title: "无边框", state: borderless ? .on : .off) { [weak self] _ in
+            guard let self else { return }
+            self.draft.borderInset = 0
+            self.draft.placement = .fit
+            self.refreshPreview()
+        }
+        let colors = PhotoFrame.allCases.map { frame in
+            UIAction(title: frame.rawValue, state: !borderless && draft.frame == frame ? .on : .off) { [weak self] _ in
+                guard let self else { return }
+                self.draft.frame = frame
+                self.draft.borderInset = 54
+                self.draft.placement = .fit
+                self.refreshPreview()
+            }
+        }
+        border.menu = UIMenu(title: "边框颜色", children: [none] + colors)
+    }
+
     private func updateEditorTab() {
+        view.endEditing(true)
         templateControls.isHidden = editTabs.selectedSegmentIndex == 1
         captionControls.isHidden = editTabs.selectedSegmentIndex == 0
         layoutCaptionLabels()
@@ -1952,15 +2198,13 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
 
     private func installCaptionControls() {
         captionControls.axis = .vertical
-        captionControls.spacing = 14
-        captionControls.addArrangedSubview(text("让照片，说出你的心意", size: 21, weight: .bold))
-        captionControls.addArrangedSubview(text("点选画面中的文字后拖动。文案会保留到拍摄、保存与打印。", size: 13))
+        captionControls.spacing = 16
+        captionControls.addArrangedSubview(text("写下这一刻", size: 20, weight: .semibold))
+        let hint = text("轻点预览中的文字可选中，拖动调整位置。", size: 14)
+        hint.textColor = BoothTheme.secondary
+        captionControls.addArrangedSubview(hint)
         let add = UIButton(type: .system)
-        var config = UIButton.Configuration.tinted()
-        config.title = "添加文案"
-        config.image = UIImage(systemName: "plus")
-        config.imagePadding = 8
-        add.configuration = config
+        BoothTheme.styleButton(add, title: "添加文案", symbol: "plus")
         add.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             var captions = self.draft.resolvedCaptions
@@ -1971,34 +2215,48 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
             self.syncCaptionFields()
         }, for: .touchUpInside)
         captionControls.addArrangedSubview(add)
+        BoothTheme.styleButton(captionPicker, title: "选择文案", symbol: "chevron.down", role: .quiet)
+        captionPicker.configuration?.imagePlacement = .trailing
         captionPicker.showsMenuAsPrimaryAction = true
-        captionPicker.configuration = .tinted()
+        captionPicker.accessibilityLabel = "当前编辑的文案"
         captionControls.addArrangedSubview(captionPicker)
         captionFields.axis = .vertical
         captionFields.spacing = 12
         captionText.delegate = self
-        captionText.font = .systemFont(ofSize: 16)
-        captionText.backgroundColor = .white
-        captionText.layer.cornerRadius = 10
-        captionText.textContainerInset = UIEdgeInsets(top: 12, left: 10, bottom: 12, right: 10)
-        captionText.heightAnchor.constraint(equalToConstant: 105).isActive = true
+        captionText.font = .preferredFont(forTextStyle: .body)
+        captionText.adjustsFontForContentSizeCategory = true
+        captionText.textColor = BoothTheme.ink
+        captionText.backgroundColor = BoothTheme.canvas
+        captionText.layer.cornerRadius = 12
+        captionText.layer.cornerCurve = .continuous
+        captionText.layer.borderWidth = 1
+        captionText.layer.borderColor = BoothTheme.line.cgColor
+        captionText.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 12)
+        let textHeight = captionText.heightAnchor.constraint(equalToConstant: 132)
+        textHeight.priority = UILayoutPriority(999)
+        textHeight.isActive = true
         captionText.accessibilityLabel = "文案内容"
         captionFields.addArrangedSubview(captionText)
         captionFields.addArrangedSubview(text("字体风格", size: 13, weight: .semibold))
+        BoothTheme.styleButton(captionFont, title: "选择字体", symbol: "chevron.down")
+        captionFont.configuration?.imagePlacement = .trailing
+        captionFont.showsMenuAsPrimaryAction = true
+        captionFont.accessibilityLabel = "文案字体"
         captionFields.addArrangedSubview(captionFont)
-        captionFont.addAction(UIAction { [weak self] _ in
-            guard let self else { return }
-            self.editCaption { $0.font = CaptionFont.allCases[self.captionFont.selectedSegmentIndex] }
-        }, for: .valueChanged)
         captionFields.addArrangedSubview(text("文字颜色", size: 13, weight: .semibold))
+        BoothTheme.styleButton(captionColor, title: "选择颜色", symbol: "chevron.down")
+        captionColor.configuration?.imagePlacement = .trailing
+        captionColor.showsMenuAsPrimaryAction = true
+        captionColor.accessibilityLabel = "文案颜色"
         captionFields.addArrangedSubview(captionColor)
-        captionColor.addAction(UIAction { [weak self] _ in
-            guard let self else { return }
-            self.editCaption { $0.color = CaptionColor.allCases[self.captionColor.selectedSegmentIndex] }
-        }, for: .valueChanged)
         captionFields.addArrangedSubview(text("字号", size: 13, weight: .semibold))
         captionSize.minimumValue = 0.02
         captionSize.maximumValue = 0.13
+        captionSize.minimumTrackTintColor = accent
+        captionSize.maximumTrackTintColor = BoothTheme.line
+        let sizeHeight = captionSize.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)
+        sizeHeight.priority = UILayoutPriority(999)
+        sizeHeight.isActive = true
         captionSize.accessibilityLabel = "文案字号"
         captionSize.addAction(UIAction { [weak self] _ in
             guard let self else { return }
@@ -2008,6 +2266,11 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
         captionFields.addArrangedSubview(text("文本框宽度 · 自动换行", size: 13, weight: .semibold))
         captionWidth.minimumValue = 0.2
         captionWidth.maximumValue = 0.95
+        captionWidth.minimumTrackTintColor = accent
+        captionWidth.maximumTrackTintColor = BoothTheme.line
+        let widthHeight = captionWidth.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)
+        widthHeight.priority = UILayoutPriority(999)
+        widthHeight.isActive = true
         captionWidth.accessibilityLabel = "文案宽度"
         captionWidth.addAction(UIAction { [weak self] _ in
             guard let self else { return }
@@ -2015,8 +2278,7 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
         }, for: .valueChanged)
         captionFields.addArrangedSubview(captionWidth)
         let delete = UIButton(type: .system)
-        delete.setTitle("删除这段文案", for: .normal)
-        delete.tintColor = .systemRed
+        BoothTheme.styleButton(delete, title: "删除这段文案", symbol: "trash", role: .destructive)
         delete.addAction(UIAction { [weak self] _ in
             guard let self, let index = self.selectedCaption else { return }
             var captions = self.draft.resolvedCaptions
@@ -2044,10 +2306,29 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
         let caption = captions[index]
         captionPicker.configuration?.title = "文案 \(index + 1) · \(String(caption.text.prefix(18)))"
         captionText.text = caption.text
-        captionFont.selectedSegmentIndex = CaptionFont.allCases.firstIndex(of: caption.font) ?? 0
-        captionColor.selectedSegmentIndex = CaptionColor.allCases.firstIndex(of: caption.color) ?? 0
+        refreshCaptionStyleMenus(caption)
         captionSize.value = Float(caption.fontSize)
         captionWidth.value = Float(caption.width)
+    }
+
+    private func refreshCaptionStyleMenus(_ caption: PhotoCaption) {
+        captionFont.configuration?.title = caption.font.rawValue
+        captionFont.accessibilityValue = caption.font.rawValue
+        captionFont.menu = UIMenu(title: "字体风格", children: CaptionFont.allCases.map { font in
+            UIAction(title: font.rawValue, state: caption.font == font ? .on : .off) { [weak self] _ in
+                self?.editCaption { $0.font = font }
+                self?.syncCaptionFields()
+            }
+        })
+        captionColor.configuration?.title = caption.color.rawValue
+        captionColor.accessibilityValue = caption.color.rawValue
+        captionColor.menu = UIMenu(title: "文字颜色", children: CaptionColor.allCases.map { color in
+            let swatch = UIImage(systemName: "circle.fill")?.withTintColor(color.color, renderingMode: .alwaysOriginal)
+            return UIAction(title: color.rawValue, image: swatch, state: caption.color == color ? .on : .off) { [weak self] _ in
+                self?.editCaption { $0.color = color }
+                self?.syncCaptionFields()
+            }
+        })
     }
 
     private func refreshCaptionMenu() {
@@ -2161,10 +2442,9 @@ private final class TemplateSelectionController: UIViewController, UITextViewDel
     }
 
     private func text(_ value: String, size: CGFloat, weight: UIFont.Weight = .regular) -> UILabel {
-        let label = UILabel()
-        label.text = value
-        label.font = .systemFont(ofSize: size, weight: weight)
-        label.numberOfLines = 0
+        let style: UIFont.TextStyle = size >= 24 ? .title2 : (size >= 20 ? .headline : .subheadline)
+        let label = BoothTheme.makeLabel(value, textStyle: style, weight: weight)
+        label.font = UIFontMetrics(forTextStyle: style).scaledFont(for: .systemFont(ofSize: size, weight: weight))
         return label
     }
 }
